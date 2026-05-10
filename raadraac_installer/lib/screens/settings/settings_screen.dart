@@ -5,6 +5,7 @@ import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_dimensions.dart';
 import '../../providers/app_provider.dart';
 import '../../services/storage_service.dart';
+import '../manage/manage_data_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   final bool embedded;
@@ -139,6 +140,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ],
         ).animate(delay: 200.ms).fade(duration: 300.ms),
+
+        const SizedBox(height: AppDimensions.lg),
+
+        // Manage Data
+        _SettingsSection(
+          title: isSomali ? 'Maamulka Xogta' : 'Manage Data',
+          isDark: isDark,
+          children: [
+            _SettingsTile(
+              title: isSomali ? 'Serveyaasha, Amarrada & APN' : 'Servers, Commands & APN',
+              subtitle: isSomali
+                  ? 'Ku dar server, amar, ama APN cusub'
+                  : 'Add custom servers, commands and APN profiles',
+              icon: Icons.tune_rounded,
+              isDark: isDark,
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ManageDataScreen()),
+              ),
+              trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.grey400),
+            ),
+          ],
+        ).animate(delay: 225.ms).fade(duration: 300.ms),
 
         const SizedBox(height: AppDimensions.lg),
 

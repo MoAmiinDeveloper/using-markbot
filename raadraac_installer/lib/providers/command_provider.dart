@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import '../data/commands_data.dart';
 import '../models/command_model.dart';
+import '../models/command_field_model.dart';
+import '../models/custom_command.dart';
 import '../models/command_history_model.dart';
 import '../services/storage_service.dart';
 import '../services/sms_service.dart';
@@ -20,9 +22,40 @@ class CommandProvider extends ChangeNotifier {
   String? _lastError;
 
   CommandProvider() {
-    _allCommands = CommandsData.commands;
-    _filteredCommands = _allCommands;
+    _reloadCommands();
     _loadPersistentData();
+  }
+
+  void _reloadCommands() {
+    final custom = _storage.getCustomCommands().map(_toCommandModel).toList();
+    _allCommands = [...CommandsData.commands, ...custom];
+    _applyFilters();
+  }
+
+  CommandModel _toCommandModel(CustomCommand c) {
+    CommandCategory cat;
+    switch (c.category) {
+      case 'network': cat = CommandCategory.network; break;
+      case 'tracking': cat = CommandCategory.tracking; break;
+      case 'outputs': cat = CommandCategory.outputs; break;
+      case 'bluetooth': cat = CommandCategory.bluetooth; break;
+      default: cat = CommandCategory.system;
+    }
+    return CommandModel(
+      id: 'custom_${c.id}',
+      name: c.name,
+      nameSo: c.name,
+      description: c.description.isEmpty ? c.template : c.description,
+      descriptionSo: c.description.isEmpty ? c.template : c.description,
+      category: cat,
+      template: c.template,
+      fields: const [],
+    );
+  }
+
+  void refreshCustomCommands() {
+    _reloadCommands();
+    notifyListeners();
   }
 
   List<CommandModel> get filteredCommands => _filteredCommands;
@@ -41,7 +74,8 @@ class CommandProvider extends ChangeNotifier {
   }
 
   void filterByDevice(String deviceId) {
-    _allCommands = CommandsData.getByModel(deviceId);
+    final custom = _storage.getCustomCommands().map(_toCommandModel).toList();
+    _allCommands = [...CommandsData.getByModel(deviceId), ...custom];
     _applyFilters();
   }
 

@@ -9,6 +9,7 @@ import '../../models/command_model.dart';
 import '../../models/command_field_model.dart';
 import '../../providers/app_provider.dart';
 import '../../providers/command_provider.dart';
+import '../../models/apn_profile.dart';
 import '../../services/sms_service.dart';
 import '../../services/storage_service.dart';
 import '../../widgets/common/app_button.dart';
@@ -412,54 +413,89 @@ class _CommandFormScreenState extends State<CommandFormScreen> {
                 height: 60,
                 child: ListView(
                   scrollDirection: Axis.horizontal,
-                  children: ServerPresets.presets.map((preset) {
-                    final isSelected = _selectedPreset == preset['name'];
-                    return GestureDetector(
-                      onTap: () => _applyServerPreset(preset),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        margin: const EdgeInsets.only(right: AppDimensions.sm),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: AppDimensions.md,
-                          vertical: AppDimensions.sm,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? AppColors.secondary
-                              : (isDark ? AppColors.darkCard : Colors.white),
-                          borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
-                          border: Border.all(
-                            color: isSelected
-                                ? AppColors.secondary
-                                : (isDark ? AppColors.darkBorder : AppColors.grey300),
-                            width: isSelected ? 2 : 1,
-                          ),
-                        ),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              preset['name'] as String,
-                              style: TextStyle(
-                                color: isSelected ? Colors.white : AppColors.grey700,
-                                fontWeight: FontWeight.w700,
-                                fontSize: AppDimensions.fontSm,
-                              ),
-                            ),
-                            Text(
-                              '${preset['host']}:${preset['port']}',
-                              style: TextStyle(
-                                color: isSelected ? Colors.white70 : AppColors.grey500,
-                                fontSize: AppDimensions.fontXs,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  }).toList(),
+                  children: [
+                    ...ServerPresets.presets.map((preset) {
+                      final isSelected = _selectedPreset == preset['name'];
+                      return _PresetChip(
+                        name: preset['name'] as String,
+                        sub: '${preset['host']}:${preset['port']}',
+                        isSelected: isSelected,
+                        isDark: isDark,
+                        onTap: () => _applyServerPreset(preset),
+                      );
+                    }),
+                    ...StorageService.instance.getCustomServers().map((s) {
+                      final preset = s.toPreset();
+                      final isSelected = _selectedPreset == s.name;
+                      return _PresetChip(
+                        name: s.name,
+                        sub: '${s.host}:${s.port}',
+                        isSelected: isSelected,
+                        isDark: isDark,
+                        isCustom: true,
+                        onTap: () => _applyServerPreset(preset),
+                      );
+                    }),
+                  ],
                 ),
               ),
+            ],
+
+            // APN Profiles (only for Set APN command)
+            if (widget.command.id == 'net_set_apn') ...[
+              const SizedBox(height: AppDimensions.lg),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      isSomali ? 'Xulashada APN' : 'APN Profiles',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppDimensions.sm),
+              Builder(builder: (_) {
+                final profiles = StorageService.instance.getApnProfiles();
+                if (profiles.isEmpty) {
+                  return Text(
+                    isSomali
+                        ? 'Ma jiraan APN la kaydiyay. Ku dar Settings > Manage Data'
+                        : 'No saved APN profiles. Add them in Settings → Manage Data',
+                    style: const TextStyle(color: AppColors.grey500, fontSize: AppDimensions.fontSm),
+                  );
+                }
+                return SizedBox(
+                  height: 60,
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    children: profiles.map((apn) {
+                      final isSelected = _selectedPreset == 'apn_${apn.id}';
+                      return _PresetChip(
+                        name: apn.name,
+                        sub: apn.apn,
+                        isSelected: isSelected,
+                        isDark: isDark,
+                        onTap: () {
+                          setState(() => _selectedPreset = 'apn_${apn.id}');
+                          if (_controllers.containsKey('apn')) {
+                            _controllers['apn']!.text = apn.apn;
+                          }
+                          if (_controllers.containsKey('apn_username')) {
+                            _controllers['apn_username']!.text = apn.username;
+                          }
+                          if (_controllers.containsKey('apn_password')) {
+                            _controllers['apn_password']!.text = apn.password;
+                          }
+                          _generateSms();
+                        },
+                      );
+                    }).toList(),
+                  ),
+                );
+              }),
             ],
 
             // Form Fields
@@ -928,3 +964,71 @@ class _SendButton extends StatelessWidget {
     );
   }
 }
+
+class _PresetChip extends StatelessWidget {
+  final String name;
+  final String sub;
+  final bool isSelected;
+  final bool isDark;
+  final bool isCustom;
+  final VoidCallback onTap;
+
+  const _PresetChip({
+    required this.name,
+    required this.sub,
+    required this.isSelected,
+    required this.isDark,
+    required this.onTap,
+    this.isCustom = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        margin: const EdgeInsets.only(right: AppDimensions.sm),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppDimensions.md,
+          vertical: AppDimensions.sm,
+        ),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? AppColors.secondary
+              : (isDark ? AppColors.darkCard : Colors.white),
+          borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+          border: Border.all(
+            color: isSelected
+                ? AppColors.secondary
+                : isCustom
+                    ? AppColors.primary.withOpacity(0.5)
+                    : (isDark ? AppColors.darkBorder : AppColors.grey300),
+            width: isSelected ? 2 : 1,
+          ),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              name,
+              style: TextStyle(
+                color: isSelected ? Colors.white : AppColors.grey700,
+                fontWeight: FontWeight.w700,
+                fontSize: AppDimensions.fontSm,
+              ),
+            ),
+            Text(
+              sub,
+              style: TextStyle(
+                color: isSelected ? Colors.white70 : AppColors.grey500,
+                fontSize: AppDimensions.fontXs,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+

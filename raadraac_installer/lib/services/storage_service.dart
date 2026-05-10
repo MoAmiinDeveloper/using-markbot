@@ -2,17 +2,24 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../models/command_history_model.dart';
+import '../models/custom_server.dart';
+import '../models/apn_profile.dart';
+import '../models/custom_command.dart';
 
 class StorageService {
   static const String _historyBox = 'command_history';
   static const String _favoritesBox = 'favorites';
   static const String _settingsBox = 'settings';
   static const String _sessionsBox = 'sessions';
+  static const String _customDataBox = 'custom_data';
 
   static const String _keyDarkMode = 'dark_mode';
   static const String _keyLanguage = 'language';
   static const String _keyDefaultLogin = 'default_login';
   static const String _keyDefaultPassword = 'default_password';
+  static const String _keyServers = 'custom_servers';
+  static const String _keyApnProfiles = 'apn_profiles';
+  static const String _keyCustomCommands = 'custom_commands';
   static const int _maxHistoryItems = 100;
 
   static StorageService? _instance;
@@ -25,6 +32,7 @@ class StorageService {
     await Hive.openBox(_favoritesBox);
     await Hive.openBox(_settingsBox);
     await Hive.openBox(_sessionsBox);
+    await Hive.openBox(_customDataBox);
   }
 
   // ─── Settings ─────────────────────────────────────────────
@@ -185,5 +193,95 @@ class StorageService {
         addedAt: DateTime.now(),
       ));
     }
+  }
+
+  // ─── Custom Servers ───────────────────────────────────────
+  List<CustomServer> getCustomServers() {
+    final box = Hive.box(_customDataBox);
+    final raw = box.get(_keyServers, defaultValue: '[]') as String;
+    try {
+      final list = jsonDecode(raw) as List;
+      return list.map((e) => CustomServer.fromJson(Map<String, dynamic>.from(e as Map))).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> saveCustomServer(CustomServer server) async {
+    final box = Hive.box(_customDataBox);
+    final list = getCustomServers();
+    final idx = list.indexWhere((s) => s.id == server.id);
+    if (idx >= 0) {
+      list[idx] = server;
+    } else {
+      list.add(server);
+    }
+    await box.put(_keyServers, jsonEncode(list.map((s) => s.toJson()).toList()));
+  }
+
+  Future<void> deleteCustomServer(String id) async {
+    final box = Hive.box(_customDataBox);
+    final list = getCustomServers()..removeWhere((s) => s.id == id);
+    await box.put(_keyServers, jsonEncode(list.map((s) => s.toJson()).toList()));
+  }
+
+  // ─── APN Profiles ─────────────────────────────────────────
+  List<ApnProfile> getApnProfiles() {
+    final box = Hive.box(_customDataBox);
+    final raw = box.get(_keyApnProfiles, defaultValue: '[]') as String;
+    try {
+      final list = jsonDecode(raw) as List;
+      return list.map((e) => ApnProfile.fromJson(Map<String, dynamic>.from(e as Map))).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> saveApnProfile(ApnProfile apn) async {
+    final box = Hive.box(_customDataBox);
+    final list = getApnProfiles();
+    final idx = list.indexWhere((a) => a.id == apn.id);
+    if (idx >= 0) {
+      list[idx] = apn;
+    } else {
+      list.add(apn);
+    }
+    await box.put(_keyApnProfiles, jsonEncode(list.map((a) => a.toJson()).toList()));
+  }
+
+  Future<void> deleteApnProfile(String id) async {
+    final box = Hive.box(_customDataBox);
+    final list = getApnProfiles()..removeWhere((a) => a.id == id);
+    await box.put(_keyApnProfiles, jsonEncode(list.map((a) => a.toJson()).toList()));
+  }
+
+  // ─── Custom Commands ──────────────────────────────────────
+  List<CustomCommand> getCustomCommands() {
+    final box = Hive.box(_customDataBox);
+    final raw = box.get(_keyCustomCommands, defaultValue: '[]') as String;
+    try {
+      final list = jsonDecode(raw) as List;
+      return list.map((e) => CustomCommand.fromJson(Map<String, dynamic>.from(e as Map))).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> saveCustomCommand(CustomCommand cmd) async {
+    final box = Hive.box(_customDataBox);
+    final list = getCustomCommands();
+    final idx = list.indexWhere((c) => c.id == cmd.id);
+    if (idx >= 0) {
+      list[idx] = cmd;
+    } else {
+      list.add(cmd);
+    }
+    await box.put(_keyCustomCommands, jsonEncode(list.map((c) => c.toJson()).toList()));
+  }
+
+  Future<void> deleteCustomCommand(String id) async {
+    final box = Hive.box(_customDataBox);
+    final list = getCustomCommands()..removeWhere((c) => c.id == id);
+    await box.put(_keyCustomCommands, jsonEncode(list.map((c) => c.toJson()).toList()));
   }
 }
