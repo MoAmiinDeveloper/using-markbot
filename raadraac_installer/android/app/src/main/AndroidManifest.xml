@@ -35,6 +35,10 @@
             android:name="io.flutter.embedding.android.NormalTheme"
             android:resource="@style/NormalTheme" />
 
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
