@@ -77,8 +77,8 @@ class CommandProvider extends ChangeNotifier {
   }
 
   void generateSms(CommandModel command, Map<String, String> values,
-      String trackerNumber, String deviceModel, {String? password}) {
-    final smsText = command.generateSms(values, password: password);
+      String trackerNumber, String deviceModel, {String? login, String? password}) {
+    final smsText = command.generateSms(values, login: login, password: password);
     _lastGeneratedCommand = CommandHistoryModel(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       commandId: command.id,

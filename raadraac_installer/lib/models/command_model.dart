@@ -86,18 +86,18 @@ class CommandModel {
     this.dangerMessage,
   });
 
-  String generateSms(Map<String, String> values, {String? password}) {
+  String generateSms(Map<String, String> values, {String? login, String? password}) {
     String sms = template;
-
-    if (requiresPassword && password != null && password.isNotEmpty) {
-      sms = '${password} $sms';
-    }
 
     for (final field in fields) {
       final value = values[field.key] ?? field.defaultValue ?? '';
       sms = sms.replaceAll('{${field.key}}', value);
     }
 
-    return sms.trim();
+    final l = login ?? '';
+    final p = password ?? '';
+    sms = '$l $p $sms';
+
+    return sms.trimRight();
   }
 }

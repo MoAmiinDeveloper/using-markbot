@@ -10,6 +10,7 @@ import '../../models/command_field_model.dart';
 import '../../providers/app_provider.dart';
 import '../../providers/command_provider.dart';
 import '../../services/sms_service.dart';
+import '../../services/storage_service.dart';
 import '../../widgets/common/app_button.dart';
 import '../../widgets/common/app_text_field.dart';
 
@@ -100,11 +101,14 @@ class _CommandFormScreenState extends State<CommandFormScreen> {
     final appProvider = context.read<AppProvider>();
     final cmdProvider = context.read<CommandProvider>();
 
+    final storage = StorageService.instance;
     cmdProvider.generateSms(
       widget.command,
       _collectValues(),
       appProvider.trackerNumber,
       appProvider.selectedDevice,
+      login: storage.defaultLogin,
+      password: storage.defaultPassword,
     );
 
     setState(() => _showPreview = true);

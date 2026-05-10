@@ -11,6 +11,7 @@ class StorageService {
 
   static const String _keyDarkMode = 'dark_mode';
   static const String _keyLanguage = 'language';
+  static const String _keyDefaultLogin = 'default_login';
   static const String _keyDefaultPassword = 'default_password';
   static const int _maxHistoryItems = 100;
 
@@ -45,6 +46,16 @@ class StorageService {
   Future<void> setLanguage(String lang) async {
     final box = Hive.box(_settingsBox);
     await box.put(_keyLanguage, lang);
+  }
+
+  String get defaultLogin {
+    final box = Hive.box(_settingsBox);
+    return box.get(_keyDefaultLogin, defaultValue: '') as String;
+  }
+
+  Future<void> setDefaultLogin(String login) async {
+    final box = Hive.box(_settingsBox);
+    await box.put(_keyDefaultLogin, login);
   }
 
   String get defaultPassword {

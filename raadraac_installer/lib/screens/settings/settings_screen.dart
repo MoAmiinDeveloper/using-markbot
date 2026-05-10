@@ -15,16 +15,19 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  final TextEditingController _loginController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
+    _loginController.text = StorageService.instance.defaultLogin;
     _passwordController.text = StorageService.instance.defaultPassword;
   }
 
   @override
   void dispose() {
+    _loginController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
@@ -97,7 +100,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    isSomali ? 'Furaha SMS Caadiga' : 'Default SMS Password',
+                    isSomali ? 'Xogta Gashiga SMS' : 'SMS Credentials',
                     style: const TextStyle(
                       fontWeight: FontWeight.w600,
                       fontSize: AppDimensions.fontMd,
@@ -106,12 +109,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   const SizedBox(height: 4),
                   Text(
                     isSomali
-                        ? 'Haddii qalabkaagu u baahan yahay furaha, ku dar halkan'
-                        : 'If your device requires a password, add it here',
+                        ? 'Waxaa loo adeegsadaa qaabka: user pass amarka. Banaan haddaan dejin'
+                        : 'Used in format: user pass command. Leave blank if device has no security',
                     style: const TextStyle(
                       color: AppColors.grey500,
                       fontSize: AppDimensions.fontSm,
                     ),
+                  ),
+                  const SizedBox(height: AppDimensions.sm),
+                  TextField(
+                    controller: _loginController,
+                    decoration: InputDecoration(
+                      hintText: isSomali ? 'Magaca Isticmaalaha (banaan)' : 'Username (blank if none)',
+                      prefixIcon: const Icon(Icons.person_outline_rounded, size: 18),
+                    ),
+                    onChanged: (v) => StorageService.instance.setDefaultLogin(v),
                   ),
                   const SizedBox(height: AppDimensions.sm),
                   TextField(
