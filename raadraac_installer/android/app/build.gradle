@@ -44,7 +44,7 @@ android {
 
     defaultConfig {
         applicationId "com.somtel.raadraac_installer"
-        minSdkVersion 26
+        minSdkVersion 21
         targetSdkVersion 33
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName

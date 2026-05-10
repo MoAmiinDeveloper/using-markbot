@@ -59,7 +59,7 @@ class MainActivity : FlutterActivity() {
 
     @Suppress("DEPRECATION")
     private fun sendSmsNative(phone: String, message: String, subscriptionId: Int?) {
-        val smsManager = if (subscriptionId != null) {
+        val smsManager = if (subscriptionId != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
             SmsManager.getSmsManagerForSubscriptionId(subscriptionId)
         } else {
             SmsManager.getDefault()
