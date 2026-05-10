@@ -237,31 +237,25 @@ class _CommandFormScreenState extends State<CommandFormScreen> {
 
   Color _categoryColor() {
     switch (widget.command.category) {
-      case CommandCategory.system:
-        return AppColors.categorySystem;
-      case CommandCategory.network:
-        return AppColors.categoryNetwork;
-      case CommandCategory.tracking:
-        return AppColors.categoryTracking;
-      case CommandCategory.outputs:
-        return AppColors.categoryOutputs;
-      case CommandCategory.bluetooth:
-        return AppColors.categoryBluetooth;
+      case CommandCategory.system: return AppColors.categorySystem;
+      case CommandCategory.network: return AppColors.categoryNetwork;
+      case CommandCategory.tracking: return AppColors.categoryTracking;
+      case CommandCategory.outputs: return AppColors.categoryOutputs;
+      case CommandCategory.bluetooth: return AppColors.categoryBluetooth;
+      case CommandCategory.obd: return AppColors.categoryObd;
+      case CommandCategory.can: return AppColors.categoryCan;
     }
   }
 
   IconData _categoryIcon() {
     switch (widget.command.category) {
-      case CommandCategory.system:
-        return Icons.settings_rounded;
-      case CommandCategory.network:
-        return Icons.cell_tower_rounded;
-      case CommandCategory.tracking:
-        return Icons.gps_fixed_rounded;
-      case CommandCategory.outputs:
-        return Icons.electrical_services_rounded;
-      case CommandCategory.bluetooth:
-        return Icons.bluetooth_rounded;
+      case CommandCategory.system: return Icons.settings_rounded;
+      case CommandCategory.network: return Icons.cell_tower_rounded;
+      case CommandCategory.tracking: return Icons.gps_fixed_rounded;
+      case CommandCategory.outputs: return Icons.electrical_services_rounded;
+      case CommandCategory.bluetooth: return Icons.bluetooth_rounded;
+      case CommandCategory.obd: return Icons.build_rounded;
+      case CommandCategory.can: return Icons.directions_car_rounded;
     }
   }
 

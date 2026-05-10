@@ -43,6 +43,8 @@ class AppColors {
   static const Color categoryTracking = Color(0xFF2ECC71);
   static const Color categoryOutputs = Color(0xFFE74C3C);
   static const Color categoryBluetooth = Color(0xFF1ABC9C);
+  static const Color categoryObd = Color(0xFFE67E22);
+  static const Color categoryCan = Color(0xFF34495E);
 
   // Shadow
   static final Color shadowLight = Colors.black.withOpacity(0.08);
