@@ -1,4 +1,6 @@
 import 'package:flutter/foundation.dart';
+import '../models/sim_card.dart';
+import '../services/sms_service.dart';
 import '../services/storage_service.dart';
 
 class AppProvider extends ChangeNotifier {
@@ -9,9 +11,12 @@ class AppProvider extends ChangeNotifier {
   bool _isDarkMode = false;
   String _language = 'en';
   bool _isLoading = false;
+  List<SimCard> _simCards = [];
+  int? _selectedSimSubscriptionId;
 
   AppProvider() {
     _loadSettings();
+    _loadSimCards();
   }
 
   String get trackerNumber => _trackerNumber;
@@ -20,10 +25,31 @@ class AppProvider extends ChangeNotifier {
   String get language => _language;
   bool get isLoading => _isLoading;
   bool get isSomali => _language == 'so';
+  List<SimCard> get simCards => _simCards;
+  int? get selectedSimSubscriptionId => _selectedSimSubscriptionId;
+  SimCard? get selectedSim => _simCards.isEmpty
+      ? null
+      : _simCards.firstWhere(
+          (s) => s.subscriptionId == _selectedSimSubscriptionId,
+          orElse: () => _simCards.first,
+        );
 
   Future<void> _loadSettings() async {
     _isDarkMode = _storage.isDarkMode;
     _language = _storage.language;
+    notifyListeners();
+  }
+
+  Future<void> _loadSimCards() async {
+    _simCards = await SmsService.instance.getSimCards();
+    if (_simCards.isNotEmpty && _selectedSimSubscriptionId == null) {
+      _selectedSimSubscriptionId = _simCards.first.subscriptionId;
+    }
+    notifyListeners();
+  }
+
+  void selectSim(int subscriptionId) {
+    _selectedSimSubscriptionId = subscriptionId;
     notifyListeners();
   }
 

@@ -193,6 +193,79 @@ class _HomeScreenState extends State<HomeScreen> {
             },
           ).animate(delay: 150.ms).slideX(begin: -0.1, end: 0).fade(),
 
+          // SIM Picker (only shown when multiple SIMs detected)
+          if (appProvider.simCards.length > 1) ...[
+            const SizedBox(height: AppDimensions.lg),
+            Text(
+              isSomali ? 'Dooro SIM-ka Dirista' : 'Send via SIM',
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+            ).animate(delay: 175.ms).fade(),
+            const SizedBox(height: AppDimensions.sm),
+            Row(
+              children: appProvider.simCards.map((sim) {
+                final isSelected = sim.subscriptionId == appProvider.selectedSimSubscriptionId;
+                return Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.only(
+                      right: sim == appProvider.simCards.last ? 0 : 8,
+                    ),
+                    child: GestureDetector(
+                      onTap: () => context.read<AppProvider>().selectSim(sim.subscriptionId),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? AppColors.secondary
+                              : (isDark ? AppColors.darkCard : Colors.white),
+                          borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+                          border: Border.all(
+                            color: isSelected
+                                ? AppColors.secondary
+                                : (isDark ? AppColors.darkBorder : AppColors.grey300),
+                            width: isSelected ? 2 : 1,
+                          ),
+                        ),
+                        child: Column(
+                          children: [
+                            Icon(
+                              Icons.sim_card_rounded,
+                              size: 20,
+                              color: isSelected ? AppColors.primary : AppColors.grey500,
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              sim.displayName,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: AppDimensions.fontSm,
+                                fontWeight: FontWeight.w600,
+                                color: isSelected ? AppColors.primary : null,
+                              ),
+                            ),
+                            if (sim.number.isNotEmpty)
+                              Text(
+                                sim.number,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: AppDimensions.fontXs,
+                                  color: isSelected
+                                      ? AppColors.primary.withOpacity(0.8)
+                                      : AppColors.grey500,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ).animate(delay: 175.ms).slideX(begin: -0.1, end: 0).fade(),
+          ],
+
           const SizedBox(height: AppDimensions.lg),
 
           // Device Model

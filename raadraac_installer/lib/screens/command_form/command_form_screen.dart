@@ -132,7 +132,10 @@ class _CommandFormScreenState extends State<CommandFormScreen> {
       if (!confirmed) return;
     }
 
-    final result = await cmdProvider.sendSms();
+    final appProvider = context.read<AppProvider>();
+    final result = await cmdProvider.sendSms(
+      subscriptionId: appProvider.selectedSimSubscriptionId,
+    );
 
     if (!mounted) return;
 

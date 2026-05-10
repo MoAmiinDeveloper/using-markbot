@@ -92,7 +92,7 @@ class CommandProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<SmsResult> sendSms() async {
+  Future<SmsResult> sendSms({int? subscriptionId}) async {
     if (_lastGeneratedCommand == null) return SmsResult.failed;
 
     _isSending = true;
@@ -102,6 +102,7 @@ class CommandProvider extends ChangeNotifier {
     final result = await _sms.sendSms(
       phoneNumber: _lastGeneratedCommand!.trackerNumber,
       message: _lastGeneratedCommand!.generatedSms,
+      subscriptionId: subscriptionId,
     );
 
     if (result == SmsResult.sent) {

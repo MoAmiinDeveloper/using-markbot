@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
-import 'package:telephony/telephony.dart';
+import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
+import '../models/sim_card.dart';
 
 enum SmsResult {
   sent,
@@ -14,7 +15,7 @@ class SmsService {
   static SmsService get instance => _instance ??= SmsService._();
   SmsService._();
 
-  final Telephony _telephony = Telephony.instance;
+  static const _channel = MethodChannel('com.somtel.raadraac_installer/sim');
 
   Future<bool> requestPermissions() async {
     final smsStatus = await Permission.sms.request();
@@ -23,13 +24,23 @@ class SmsService {
   }
 
   Future<bool> hasPermissions() async {
-    final sms = await Permission.sms.status;
-    return sms.isGranted;
+    return (await Permission.sms.status).isGranted;
+  }
+
+  Future<List<SimCard>> getSimCards() async {
+    try {
+      final List<dynamic> result = await _channel.invokeMethod('getSimCards');
+      return result.map((e) => SimCard.fromMap(e as Map)).toList();
+    } catch (e) {
+      debugPrint('getSimCards error: $e');
+      return [];
+    }
   }
 
   Future<SmsResult> sendSms({
     required String phoneNumber,
     required String message,
+    int? subscriptionId,
   }) async {
     try {
       final hasPerms = await hasPermissions();
@@ -38,26 +49,16 @@ class SmsService {
         if (!granted) return SmsResult.permissionDenied;
       }
 
-      bool sent = false;
+      final args = <String, dynamic>{
+        'phone': phoneNumber,
+        'message': message,
+      };
+      if (subscriptionId != null) args['subscriptionId'] = subscriptionId;
 
-      await _telephony.sendSms(
-        to: phoneNumber,
-        message: message,
-        statusListener: (SendStatus status) {
-          if (status == SendStatus.SENT) {
-            sent = true;
-            debugPrint('SMS sent to $phoneNumber');
-          } else {
-            debugPrint('SMS delivery status: $status');
-          }
-        },
-        isMultipart: message.length > 160,
-      );
-
-      // Give a moment for the callback
-      await Future.delayed(const Duration(milliseconds: 500));
+      await _channel.invokeMethod('sendSms', args);
+      debugPrint('SMS sent to $phoneNumber via subscriptionId=$subscriptionId');
       return SmsResult.sent;
-    } on Exception catch (e) {
+    } catch (e) {
       debugPrint('SMS send error: $e');
       return SmsResult.failed;
     }
