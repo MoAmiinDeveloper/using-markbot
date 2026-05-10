@@ -6,51 +6,44 @@ enum CommandCategory {
   tracking,
   outputs,
   bluetooth,
+  obd,
+  can,
 }
 
 extension CommandCategoryExtension on CommandCategory {
   String get name {
     switch (this) {
-      case CommandCategory.system:
-        return 'System';
-      case CommandCategory.network:
-        return 'Network';
-      case CommandCategory.tracking:
-        return 'Tracking';
-      case CommandCategory.outputs:
-        return 'Outputs';
-      case CommandCategory.bluetooth:
-        return 'Bluetooth';
+      case CommandCategory.system: return 'System';
+      case CommandCategory.network: return 'Network';
+      case CommandCategory.tracking: return 'Tracking';
+      case CommandCategory.outputs: return 'Outputs';
+      case CommandCategory.bluetooth: return 'Bluetooth';
+      case CommandCategory.obd: return 'OBD';
+      case CommandCategory.can: return 'CAN';
     }
   }
 
   String get nameSo {
     switch (this) {
-      case CommandCategory.system:
-        return 'Nidaamka';
-      case CommandCategory.network:
-        return 'Shabakadda';
-      case CommandCategory.tracking:
-        return 'Raadraaca';
-      case CommandCategory.outputs:
-        return 'Wax soo saarka';
-      case CommandCategory.bluetooth:
-        return 'Bluetooth';
+      case CommandCategory.system: return 'Nidaamka';
+      case CommandCategory.network: return 'Shabakadda';
+      case CommandCategory.tracking: return 'Raadraaca';
+      case CommandCategory.outputs: return 'Wax soo saarka';
+      case CommandCategory.bluetooth: return 'Bluetooth';
+      case CommandCategory.obd: return 'OBD';
+      case CommandCategory.can: return 'CAN';
     }
   }
 
   String get icon {
     switch (this) {
-      case CommandCategory.system:
-        return '⚙️';
-      case CommandCategory.network:
-        return '🌐';
-      case CommandCategory.tracking:
-        return '📍';
-      case CommandCategory.outputs:
-        return '🔌';
-      case CommandCategory.bluetooth:
-        return '🔷';
+      case CommandCategory.system: return '⚙️';
+      case CommandCategory.network: return '🌐';
+      case CommandCategory.tracking: return '📍';
+      case CommandCategory.outputs: return '🔌';
+      case CommandCategory.bluetooth: return '🔷';
+      case CommandCategory.obd: return '🔧';
+      case CommandCategory.can: return '🚗';
     }
   }
 }

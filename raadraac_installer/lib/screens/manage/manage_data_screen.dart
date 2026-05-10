@@ -176,7 +176,7 @@ class _CommandsTab extends StatefulWidget {
 class _CommandsTabState extends State<_CommandsTab> {
   List<CustomCommand> _commands = [];
 
-  final List<String> _categories = ['system', 'network', 'tracking', 'outputs', 'bluetooth'];
+  final List<String> _categories = ['system', 'network', 'tracking', 'outputs', 'bluetooth', 'obd', 'can'];
 
   @override
   void initState() {
