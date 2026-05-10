@@ -27,7 +27,7 @@ class RaadraacApp extends StatelessWidget {
             builder: (context, child) {
               return MediaQuery(
                 data: MediaQuery.of(context).copyWith(
-                  textScaler: TextScaler.noScaling,
+                  textScaleFactor: 1.0,
                 ),
                 child: child!,
               );

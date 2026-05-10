@@ -36,7 +36,7 @@ class _CommandFormScreenState extends State<CommandFormScreen> {
     _isDangerous = widget.command.isDangerous;
     for (final field in widget.command.fields) {
       if (field.type == FieldType.dropdown) {
-        _dropdownValues[field.key] = field.defaultValue ?? field.options?.first;
+        _dropdownValues[field.key] = field.defaultValue ?? field.options?.first ?? '';
       } else {
         _controllers[field.key] = TextEditingController(text: field.defaultValue ?? '');
       }
@@ -541,7 +541,7 @@ class _CommandFormScreenState extends State<CommandFormScreen> {
           errorText: error,
           onChanged: (val) {
             setState(() {
-              _dropdownValues[field.key] = val;
+              _dropdownValues[field.key] = val ?? '';
               _errors[field.key] = null;
               _showPreview = false;
             });
