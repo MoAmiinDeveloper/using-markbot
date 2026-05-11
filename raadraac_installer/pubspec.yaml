@@ -1,0 +1,43 @@
+name: raadraac_installer
+description: Raadraac Installer Tools - Somtel Teltonika GPS Device Management App
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State management
+  provider: ^6.0.5
+
+  # Local storage
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+
+  # SMS
+  telephony: ^0.2.0
+
+  # UI & Animations
+  flutter_animate: ^4.2.0
+
+  # Permissions
+  permission_handler: ^10.4.5
+
+  # Utils
+  intl: ^0.18.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  hive_generator: ^2.0.1
+  build_runner: ^2.4.7
+  flutter_lints: ^2.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/translations/

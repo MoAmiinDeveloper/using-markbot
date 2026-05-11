@@ -1,0 +1,85 @@
+{
+  "app_name": "Raadraac Installer",
+  "company": "Somtel",
+  "tagline": "Professional GPS Installer Tools",
+
+  "home": "Home",
+  "commands": "Commands",
+  "history": "History",
+  "favorites": "Favorites",
+  "settings": "Settings",
+
+  "tracker_number": "Tracker SIM Number",
+  "tracker_number_hint": "Enter SIM phone number",
+  "device_model": "Device Model",
+  "select_device": "Select Device Model",
+  "continue": "Continue",
+  "recent_sessions": "Recent Sessions",
+
+  "search_commands": "Search commands...",
+  "all_categories": "All",
+  "no_commands_found": "No commands found",
+
+  "generate_sms": "Generate SMS",
+  "send_sms": "Send SMS",
+  "copy_sms": "Copy SMS",
+  "sms_preview": "SMS Preview",
+  "sms_ready": "SMS ready to send",
+  "fill_all_fields": "Please fill all required fields",
+  "sms_sent": "SMS sent successfully",
+  "sms_failed": "Failed to send SMS",
+  "copy_success": "Copied to clipboard",
+
+  "system": "System",
+  "network": "Network",
+  "tracking": "Tracking",
+  "outputs": "Outputs",
+  "bluetooth": "Bluetooth",
+
+  "reboot": "Reboot",
+  "get_info": "Get Info",
+  "factory_reset": "Factory Reset",
+  "set_apn": "Set APN",
+  "set_server": "Set Server",
+
+  "engine_cut": "Engine Cut",
+  "engine_restore": "Engine Restore",
+  "buzzer": "Buzzer",
+
+  "ble_scan": "BLE Scan",
+  "pair_sensor": "Pair Sensor",
+
+  "server_presets": "Server Presets",
+
+  "command_history": "Command History",
+  "clear_history": "Clear History",
+  "no_history": "No command history yet",
+  "resend": "Resend",
+
+  "favorites_title": "Favorites",
+  "no_favorites": "No favorites added yet",
+  "added_to_favorites": "Added to favorites",
+  "removed_from_favorites": "Removed from favorites",
+
+  "dark_mode": "Dark Mode",
+  "language": "Language",
+  "about": "About",
+  "version": "Version",
+  "default_password": "Default SMS Password",
+
+  "permission_required": "Permission Required",
+  "sms_permission_msg": "This app needs SMS permission to send commands to GPS devices.",
+  "grant_permission": "Grant Permission",
+
+  "enter_tracker_number": "Please enter tracker SIM number",
+  "select_device_model": "Please select a device model",
+  "invalid_phone": "Invalid phone number",
+
+  "sending": "Sending...",
+  "cancel": "Cancel",
+  "confirm": "Confirm",
+  "warning": "Warning",
+  "danger_confirm": "This operation is dangerous. Are you sure?",
+  "copy": "Copy",
+  "characters": "characters"
+}

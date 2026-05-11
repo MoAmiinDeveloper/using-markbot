@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Gold "R" letter for Raadraac -->
+    <path
+        android:fillColor="#FFD700"
+        android:pathData="M34,24 L34,84 L46,84 L46,60 L58,60 L70,84 L84,84 L70,58 C76,54 80,48 80,40 C80,30 72,24 62,24 Z M46,36 L60,36 C65,36 68,39 68,44 C68,49 65,52 60,52 L46,52 Z"/>
+</vector>

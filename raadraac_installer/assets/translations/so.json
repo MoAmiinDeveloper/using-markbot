@@ -1,0 +1,85 @@
+{
+  "app_name": "Raadraac Installer",
+  "company": "Somtel",
+  "tagline": "Qalabka Xirfadlaha GPS",
+
+  "home": "Guriga",
+  "commands": "Amarrada",
+  "history": "Taariikhda",
+  "favorites": "La doortay",
+  "settings": "Hagaajinta",
+
+  "tracker_number": "Lambarka Tracker-ka",
+  "tracker_number_hint": "Geli lambarka telefoonka SIM",
+  "device_model": "Nooca Qalabka",
+  "select_device": "Dooro Nooca Qalabka",
+  "continue": "Sii wad",
+  "recent_sessions": "Xidhiidhyada dhawaan",
+
+  "search_commands": "Raadi amarrada...",
+  "all_categories": "Dhammaan",
+  "no_commands_found": "Amar lama helin",
+
+  "generate_sms": "Samee SMS",
+  "send_sms": "Dir SMS",
+  "copy_sms": "Koobiyee SMS",
+  "sms_preview": "Daawo SMS",
+  "sms_ready": "SMS diyaar u ah dirista",
+  "fill_all_fields": "Fadlan buuxi dhammaan meelaha looga baahan yahay",
+  "sms_sent": "SMS si guul ah ayaa loo diray",
+  "sms_failed": "Dirista SMS-ka ayaa fashilantay",
+  "copy_success": "Waa la koobiyeeyey",
+
+  "system": "Nidaamka",
+  "network": "Shabakadda",
+  "tracking": "Raadraaca",
+  "outputs": "Wax soo saarka",
+  "bluetooth": "Bluetooth",
+
+  "reboot": "Dib u bilow",
+  "get_info": "Hel Macluumaadka",
+  "factory_reset": "Dib u habeyn",
+  "set_apn": "Dejiso APN",
+  "set_server": "Dejiso Server-ka",
+
+  "engine_cut": "Jari Matoorka",
+  "engine_restore": "Soo Celiso Matoorka",
+  "buzzer": "Buzzer",
+
+  "ble_scan": "Raadi BLE",
+  "pair_sensor": "Kujowso Sensor",
+
+  "server_presets": "Qaabeynta Server-ka",
+
+  "command_history": "Taariikhda Amarrada",
+  "clear_history": "Nadiifi Taariikhda",
+  "no_history": "Taariikhdu ma jirto weli",
+  "resend": "Dir mar kale",
+
+  "favorites_title": "Amarrada La Doortay",
+  "no_favorites": "Amar la dooran ma jirto",
+  "added_to_favorites": "Waxaa lagu daray la-doortay",
+  "removed_from_favorites": "Waxaa laga saaray la-doortay",
+
+  "dark_mode": "Habka Mugdiga",
+  "language": "Luqadda",
+  "about": "Ku saabsan",
+  "version": "Nooca",
+  "default_password": "Furaha SMS Caadiga",
+
+  "permission_required": "Fasax ayaa loo baahan yahay",
+  "sms_permission_msg": "App-kan wuxuu u baahan yahay fasaxa SMS si uu amarrada GPS qalabka ugu diro.",
+  "grant_permission": "Sii Fasaxa",
+
+  "enter_tracker_number": "Fadlan geli lambarka tracker-ka",
+  "select_device_model": "Fadlan dooro nooca qalabka",
+  "invalid_phone": "Lambarka telefoonka waa khalad",
+
+  "sending": "Waa la diraya...",
+  "cancel": "Baaji",
+  "confirm": "Xaqiiji",
+  "warning": "Digdaimo",
+  "danger_confirm": "Hawshan waa khatar. Ma hubtaa?",
+  "copy": "Koobiyee",
+  "characters": "xaraf"
+}
