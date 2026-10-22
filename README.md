@@ -32,6 +32,15 @@ cd web && npm install && npm run dev
 cd server && go run ./cmd/simulator -devices 25
 ```
 
+## Running on Windows (no Docker)
+
+In PowerShell, from the cloned folder:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\windows\setup.ps1   # one time: Go, Node, PostgreSQL via winget
+powershell -ExecutionPolicy Bypass -File scripts\windows\start.ps1 -Demo
+```
+
 ## Running on an Android phone (Termux)
 
 Install **Termux** and **Termux:API** from F-Droid (the Play Store versions are outdated), then:
