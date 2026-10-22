@@ -1,0 +1,321 @@
+// Package store persists devices, users and positions in PostgreSQL and keeps
+// the latest state of every device in memory, so listing devices and
+// computing live status never hits the database.
+//
+// Store implements domain.Sink: the gateway hands decoded positions to it,
+// it writes them in one round trip and then publishes live events.
+package store
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log/slog"
+	"sort"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/moamiindeveloper/fleet/server/internal/domain"
+)
+
+// Errors returned by the store.
+var (
+	ErrNotFound           = errors.New("not found")
+	ErrDuplicateIMEI      = errors.New("a device with this IMEI already exists")
+	ErrInvalidCredentials = errors.New("invalid email or password")
+	ErrUnknownDevice      = errors.New("unknown device")
+)
+
+// Device statuses, see docs/API.md.
+const (
+	StatusMoving  = "moving"
+	StatusIdle    = "idle"
+	StatusStopped = "stopped"
+	StatusOffline = "offline"
+	StatusNever   = "never"
+)
+
+// MovingSpeed is the speed (km/h) above which a vehicle counts as moving.
+const MovingSpeed = 3.0
+
+// Live event types published to the hub.
+const (
+	EventPosition = "position"
+	EventDevice   = "device"
+	EventDeleted  = "deleted"
+)
+
+// Publisher receives live events. *hub.Hub implements it. Publish must not block.
+type Publisher interface {
+	Publish(msgType string, data any)
+}
+
+// Options configures a Store.
+type Options struct {
+	// AutoRegister creates devices for unknown IMEIs on first connection.
+	AutoRegister bool
+	// OfflineAfter is how long without messages before a device is offline.
+	// Defaults to 10 minutes.
+	OfflineAfter time.Duration
+	// Publisher receives live events; nil disables publishing.
+	Publisher Publisher
+	Logger    *slog.Logger
+	// Now overrides the clock (tests).
+	Now func() time.Time
+}
+
+// Device is the API representation of a tracker together with its live state.
+type Device struct {
+	ID        int64            `json:"id"`
+	Name      string           `json:"name"`
+	IMEI      string           `json:"imei"`
+	Protocol  string           `json:"protocol"`
+	Plate     string           `json:"plate"`
+	Model     string           `json:"model"`
+	Category  string           `json:"category"`
+	Phone     string           `json:"phone"`
+	Status    string           `json:"status"`
+	LastSeen  *time.Time       `json:"lastSeen"`
+	Position  *domain.Position `json:"position"`
+	CreatedAt time.Time        `json:"createdAt"`
+	UpdatedAt time.Time        `json:"updatedAt"`
+}
+
+// deviceEntry is the cached state of one device. Positions referenced from
+// the cache are never mutated after insertion, so they can be shared.
+type deviceEntry struct {
+	dev        Device // Status is ignored; computed on read
+	lastStatus string // last status announced to the hub
+}
+
+// Store is the PostgreSQL-backed repository and domain.Sink. It is safe for
+// concurrent use.
+type Store struct {
+	pool *pgxpool.Pool
+	opts Options
+	log  *slog.Logger
+
+	mu      sync.RWMutex
+	devices map[int64]*deviceEntry
+	byIMEI  map[string]int64
+}
+
+var _ domain.Sink = (*Store)(nil)
+
+// New runs pending migrations and loads the device cache.
+func New(ctx context.Context, pool *pgxpool.Pool, opts Options) (*Store, error) {
+	if opts.OfflineAfter <= 0 {
+		opts.OfflineAfter = 10 * time.Minute
+	}
+	if opts.Logger == nil {
+		opts.Logger = slog.New(slog.DiscardHandler)
+	}
+	if opts.Now == nil {
+		opts.Now = time.Now
+	}
+	if err := Migrate(ctx, pool); err != nil {
+		return nil, fmt.Errorf("migrate: %w", err)
+	}
+	s := &Store{
+		pool:    pool,
+		opts:    opts,
+		log:     opts.Logger,
+		devices: make(map[int64]*deviceEntry),
+		byIMEI:  make(map[string]int64),
+	}
+	if err := s.loadCache(ctx); err != nil {
+		return nil, fmt.Errorf("load devices: %w", err)
+	}
+	return s, nil
+}
+
+const deviceColumns = `d.id, d.name, d.imei, d.protocol, d.plate, d.model, d.category, d.phone, d.created_at, d.updated_at`
+
+func scanDevice(row pgx.Row, extra ...any) (Device, error) {
+	var d Device
+	dst := append([]any{&d.ID, &d.Name, &d.IMEI, &d.Protocol, &d.Plate, &d.Model, &d.Category, &d.Phone, &d.CreatedAt, &d.UpdatedAt}, extra...)
+	if err := row.Scan(dst...); err != nil {
+		return d, err
+	}
+	d.CreatedAt, d.UpdatedAt = d.CreatedAt.UTC(), d.UpdatedAt.UTC()
+	return d, nil
+}
+
+func (s *Store) loadCache(ctx context.Context) error {
+	rows, err := s.pool.Query(ctx, `SELECT `+deviceColumns+`, s.position, s.last_seen
+		FROM devices d LEFT JOIN device_state s ON s.device_id = d.id`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	now := s.opts.Now()
+	for rows.Next() {
+		var (
+			posJSON  []byte
+			lastSeen *time.Time
+		)
+		d, err := scanDevice(rows, &posJSON, &lastSeen)
+		if err != nil {
+			return err
+		}
+		if lastSeen != nil {
+			t := lastSeen.UTC()
+			d.LastSeen = &t
+		}
+		if len(posJSON) > 0 {
+			var p domain.Position
+			if err := json.Unmarshal(posJSON, &p); err != nil {
+				return fmt.Errorf("device %d state: %w", d.ID, err)
+			}
+			d.Position = &p
+		}
+		e := &deviceEntry{dev: d}
+		e.lastStatus = s.status(&e.dev, now)
+		s.devices[d.ID] = e
+		s.byIMEI[d.IMEI] = d.ID
+	}
+	return rows.Err()
+}
+
+// Ping checks database connectivity.
+func (s *Store) Ping(ctx context.Context) error { return s.pool.Ping(ctx) }
+
+// status derives the live status of d at time now.
+func (s *Store) status(d *Device, now time.Time) string {
+	switch {
+	case d.Position == nil:
+		return StatusNever
+	case d.LastSeen == nil || now.Sub(*d.LastSeen) > s.opts.OfflineAfter:
+		return StatusOffline
+	case d.Position.Speed > MovingSpeed:
+		return StatusMoving
+	case ignitionOn(d.Position.Attributes):
+		return StatusIdle
+	default:
+		return StatusStopped
+	}
+}
+
+func ignitionOn(attrs map[string]any) bool {
+	on, _ := attrs[domain.AttrIgnition].(bool)
+	return on
+}
+
+// view returns a copy of e with its status computed. Caller holds s.mu.
+func (s *Store) view(e *deviceEntry, now time.Time) Device {
+	d := e.dev
+	d.Status = s.status(&d, now)
+	return d
+}
+
+// publish forwards an event to the publisher, if any.
+func (s *Store) publish(msgType string, data any) {
+	if s.opts.Publisher != nil {
+		s.opts.Publisher.Publish(msgType, data)
+	}
+}
+
+// Devices returns all devices ordered by name (then id).
+func (s *Store) Devices() []Device {
+	now := s.opts.Now()
+	s.mu.RLock()
+	out := make([]Device, 0, len(s.devices))
+	for _, e := range s.devices {
+		out = append(out, s.view(e, now))
+	}
+	s.mu.RUnlock()
+	sort.Slice(out, func(i, j int) bool {
+		a, b := strings.ToLower(out[i].Name), strings.ToLower(out[j].Name)
+		if a != b {
+			return a < b
+		}
+		return out[i].ID < out[j].ID
+	})
+	return out
+}
+
+// Device returns one device or ErrNotFound.
+func (s *Store) Device(id int64) (Device, error) {
+	now := s.opts.Now()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	e, ok := s.devices[id]
+	if !ok {
+		return Device{}, ErrNotFound
+	}
+	return s.view(e, now), nil
+}
+
+// Summary counts devices per status.
+type Summary struct {
+	Total   int `json:"total"`
+	Moving  int `json:"moving"`
+	Idle    int `json:"idle"`
+	Stopped int `json:"stopped"`
+	Offline int `json:"offline"`
+	Never   int `json:"never"`
+}
+
+// Summary returns fleet-wide status counts.
+func (s *Store) Summary() Summary {
+	now := s.opts.Now()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	sum := Summary{Total: len(s.devices)}
+	for _, e := range s.devices {
+		switch s.status(&e.dev, now) {
+		case StatusMoving:
+			sum.Moving++
+		case StatusIdle:
+			sum.Idle++
+		case StatusStopped:
+			sum.Stopped++
+		case StatusOffline:
+			sum.Offline++
+		default:
+			sum.Never++
+		}
+	}
+	return sum
+}
+
+// Run periodically re-evaluates statuses so time-based transitions (going
+// offline) are pushed to live clients. It blocks until ctx is done.
+func (s *Store) Run(ctx context.Context) {
+	interval := min(s.opts.OfflineAfter/4, 15*time.Second)
+	t := time.NewTicker(max(interval, time.Second))
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			s.announceStatusChanges()
+		}
+	}
+}
+
+func (s *Store) announceStatusChanges() {
+	now := s.opts.Now()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, e := range s.devices {
+		s.announceLocked(e, now, false)
+	}
+}
+
+// announceLocked publishes e as a "device" event when force is set or its
+// status changed since the last announcement. Events are published while
+// s.mu is held so their order always matches the cache (Publish never blocks).
+func (s *Store) announceLocked(e *deviceEntry, now time.Time, force bool) {
+	d := s.view(e, now)
+	if force || d.Status != e.lastStatus {
+		e.lastStatus = d.Status
+		s.publish(EventDevice, d)
+	}
+}
