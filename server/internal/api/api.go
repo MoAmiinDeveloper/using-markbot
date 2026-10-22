@@ -82,6 +82,7 @@ func (s *Server) routes() http.Handler {
 			r.Get("/health", s.handleHealth)
 			r.Post("/auth/login", s.handleLogin)
 			r.Post("/ingest/traccar", s.handleTraccar) // authenticated by ?token=
+			s.mountPublic(r)                           // Phase 3: unauthenticated share links
 
 			r.Group(func(r chi.Router) {
 				r.Use(s.authenticate)
@@ -104,6 +105,10 @@ func (s *Server) routes() http.Handler {
 				r.Get("/push/vapid-key", s.handleVAPIDKey)
 				r.Post("/push/subscriptions", s.handleAddPushSubscription)
 				r.Delete("/push/subscriptions", s.handleDeletePushSubscription)
+
+				// Phase 3 modules register their own routes (incl. their own role checks).
+				s.mountAnalytics(r)
+				s.mountManagement(r)
 
 				r.Group(func(r chi.Router) {
 					r.Use(requireAdmin)

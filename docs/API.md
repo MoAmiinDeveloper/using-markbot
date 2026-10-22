@@ -262,3 +262,161 @@ Traccar config (`conf/traccar.xml`, Traccar 5.x/6.x — verified against `Keys.j
   number of push subscriptions that accepted it).
 - **Traccar bridge**: wrong/missing token → 401; unparsable body → 400; with `AUTO_REGISTER=false`
   unknown devices are acknowledged with `{"status": "ignored"}` (200) so Traccar does not retry.
+
+---
+
+# Phase 3 additions — Trakzee-style operations (reports, drivers, maintenance, access control)
+
+Ownership (for parallel work): **analytics module** = reports, exports, dashboard, places,
+geocoding, driver-behaviour/idle events (`api/analytics_routes.go`, migration `0003_*`).
+**management module** = roles/groups/users + access control, drivers, maintenance, reminders,
+expenses, share links, odometer/engine-hours counters (`api/management_routes.go`,
+`api/access.go`, migration `0004_*`).
+
+## Roles & access control
+
+`User.role`: `admin` (everything, all devices) | `manager` (manage devices/drivers/maintenance/
+expenses/geofences of devices in their groups; non-engine commands) | `viewer` (read-only, their
+groups). Existing `user` rows migrate to `manager`. Non-admins only see devices in their groups —
+this applies to **every** endpoint returning device data (devices, positions, trips, events,
+commands, reports, dashboard, summary, expenses, maintenance, drivers' vehicles) **and the
+WebSocket** (per-client filtering). Admin-only endpoints stay admin-only.
+
+```jsonc
+Group = { "id": 1, "name": "North depot", "color": "#ffd700", "deviceIds": [1,2], "createdAt": "..." }
+User  = { "id": 1, "email": "...", "name": "...", "role": "admin|manager|viewer",
+          "groupIds": [1], "active": true, "createdAt": "...", "lastLoginAt": null }
+```
+`Device` gains `"groupIds": []`, `"odometer": 123456.7` (km — tracker odometer if reported, else
+accumulated GPS distance; settable via PATCH `odometer` to calibrate), `"engineHours": 812.4`
+(h, accumulated ignition-on time; settable via PATCH), `"driverId": null` (current driver).
+
+| Method | Path | Notes |
+|---|---|---|
+| GET/POST | `/groups` | GET: admin all, others their groups. POST admin |
+| PATCH/DELETE | `/groups/{id}` | admin |
+| GET/POST | `/users` | admin. POST `{email,name,password,role,groupIds}` |
+| PATCH/DELETE | `/users/{id}` | admin (can't delete/demote self or last admin) |
+| PATCH | `/me` | `{name?, currentPassword?, newPassword?}` |
+
+`User` returned by `/me` and login gains `role` values above plus `groupIds`.
+
+## Drivers
+
+```jsonc
+Driver = { "id": 1, "name": "Ahmed Ali", "phone": "", "licenseNumber": "", "licenseExpiry": "2027-01-31",
+           "tag": "00000A1B2C3D",       // iButton/RFID id as reported in attributes.driverId (hex, case-insensitive)
+           "deviceId": 4,                // currently assigned vehicle (manual) or null
+           "notes": "", "createdAt": "..." }
+```
+Driver resolution for a position: matching `tag` from `attributes.driverId`, else the driver
+manually assigned to the device. `GET/POST /drivers`, `PATCH/DELETE /drivers/{id}` (admin/manager).
+
+## Maintenance & reminders
+
+```jsonc
+Maintenance = { "id": 1, "deviceId": 4, "name": "Oil change",
+  "intervalKm": 10000, "intervalDays": 180, "intervalHours": 0,     // any combination, 0 = unused
+  "lastServiceDate": "2026-08-01", "lastServiceKm": 80000, "lastServiceHours": 700,
+  "notifyBeforeKm": 500, "notifyBeforeDays": 7, "notifyBeforeHours": 10,
+  "status": "ok|dueSoon|overdue",               // computed, worst of the used intervals
+  "nextDueKm": 90000, "nextDueDate": "2027-01-28", "nextDueHours": null,
+  "remainingKm": 1200.5, "remainingDays": 40, "remainingHours": null }
+ServiceRecord = { "id", "maintenanceId", "deviceId", "date", "odometer", "engineHours", "cost", "notes" }
+Reminder = { "id", "deviceId": 4|null, "driverId": null|1, "kind": "insurance|registration|license|permit|inspection|other",
+             "title": "Insurance renewal", "dueDate": "2026-12-31", "notifyDaysBefore": 14,
+             "status": "ok|dueSoon|overdue", "notes": "" }
+```
+| Method | Path | Notes |
+|---|---|---|
+| GET/POST | `/maintenance?deviceId=` | |
+| PATCH/DELETE | `/maintenance/{id}` | |
+| POST | `/maintenance/{id}/complete` | `{date, odometer?, engineHours?, cost?, notes?}` → resets the schedule, stores a ServiceRecord, creates an expense (category maintenance) when cost > 0 |
+| GET | `/maintenance/{id}/history` | `ServiceRecord[]` |
+| GET/POST | `/reminders?deviceId=&driverId=` | |
+| PATCH/DELETE | `/reminders/{id}` | |
+
+A background job (every 10 min) emits events `maintenanceDue` / `documentExpiry` once when an item
+enters `dueSoon` and once when it becomes `overdue` (attributes: `{itemId, name, status, ...}`).
+
+## Expenses
+
+```jsonc
+Expense = { "id", "deviceId", "driverId": null, "category": "fuel|maintenance|toll|parking|fine|insurance|tyres|other",
+            "amount": 45.5, "liters": 30.2, "odometer": 81234, "date": "2026-10-20", "notes": "", "createdAt" }
+```
+`GET /expenses?deviceId=&from=&to=&category=`, `POST /expenses`, `PATCH/DELETE /expenses/{id}`.
+Currency is a global setting.
+
+## Share live location
+
+`POST /devices/{id}/share` `{ "hours": 24 }` → `{ "token", "url": "/share/<token>", "expiresAt" }`
+(admin/manager). `GET /devices/{id}/shares`, `DELETE /shares/{token}`.
+Public (no auth): `GET /api/v1/public/share/{token}` → `{ "name", "category", "position": Position|null,
+"status", "expiresAt" }` (no IMEI/phone). 410 when expired/revoked. The web app serves `/share/:token`.
+
+## Settings additions
+`Settings` gains `"currency": "USD"`, `"idleAlertMinutes": 0` (0 = off), `"harshScoring": true`.
+
+## New event types
+`harshAcceleration`, `harshBraking`, `harshCornering` (Teltonika green-driving IO 253 with value IO 254;
+Traccar alarms `hardAcceleration/hardBraking/hardCornering`), `idle` (ignition on & speed ≤ 3 for ≥
+`idleAlertMinutes`, once per idle period; attributes `{minutes}`), `maintenanceDue`, `documentExpiry`.
+`NotificationPrefs.events` gains these keys (defaults: inApp on, telegram/push on except idle and harsh*).
+
+## Places (POIs) & addresses
+
+```jsonc
+Place = { "id", "name": "Main warehouse", "category": "depot|customer|fuel|parking|workshop|other",
+          "lat", "lng", "radius": 150, "color": "#ffd700", "createdAt" }
+```
+`GET/POST /places`, `PATCH/DELETE /places/{id}` (admin/manager).
+`GET /geocode?lat=&lng=` → `{ "address": "Al Quoz, Dubai", "place": Place|null }` — nearest place within its
+radius wins; otherwise reverse geocoding (env `GEOCODER=nominatim|off`, default `nominatim`,
+`GEOCODER_URL` default `https://nominatim.openstreetmap.org`), cached in DB (rounded to ~10 m),
+rate-limited to 1 req/s, never on the ingest path. Falls back to `"lat, lng"`.
+
+## Reports
+
+`GET /reports/{type}?deviceIds=1,2&groupId=&driverId=&from=&to=&format=json|csv|xlsx|pdf`
+(default: all visible devices, last 24h; max range 93 days). Always filtered by access scope.
+
+```jsonc
+Report = { "type": "summary", "title": "Travel summary", "from": "...", "to": "...",
+  "columns": [ { "key": "distance", "label": "Distance", "unit": "km", "kind": "number|duration|datetime|text|speed|money|link" } ],
+  "rows": [ { "deviceId": 4, "device": "Truck 07", "distance": 123.4, ... } ],
+  "totals": { "distance": 2345.6 } }   // optional
+```
+`kind: duration` values are seconds. CSV/XLSX/PDF render the same columns (PDF: Somtel-branded
+header — navy bar, gold rule, logo text, period, generated-at; landscape A4).
+
+| type | Rows (one per …) | Key columns |
+|---|---|---|
+| `summary` | device | distance, drivingTime, idleTime, stopTime, engineHours, maxSpeed, avgSpeed, trips, stops, overspeeds, harshEvents, alerts, fuelUsed (if reported) |
+| `daily` | device × day | date, distance, drivingTime, idleTime, firstStart, lastStop, maxSpeed |
+| `trips` | trip | device, driver, start, end, startAddress, endAddress, distance, duration, maxSpeed, avgSpeed |
+| `stops` | stop ≥ 5 min | device, start, end, duration, address, ignition (on → idle stop) |
+| `idle` | idle period ≥ 3 min | device, start, end, duration, address |
+| `ignition` | ignition on→off span | device, on, off, duration, distance |
+| `overspeed` | overspeed event | device, driver, time, speed, limit, maxSpeed, address |
+| `geofence` | visit | device, geofence, enter, exit, duration |
+| `alerts` | event | device, time, type, message, address |
+| `driver` | driver (or device when no driver) | driver, distance, drivingTime, overspeeds, harshAcceleration, harshBraking, harshCornering, idleTime, score (0–100) |
+| `expenses` | expense | date, device, category, amount, liters, notes; totals per category |
+| `maintenance` | maintenance item | device, item, status, nextDue, remaining, lastService |
+| `systemLog` | device | packets, firstPacket, lastPacket, gaps (> 30 min without data), longestGap, avgInterval |
+
+Driver score: `100 − (overspeeds×5 + harsh×3 + idleHours×2)` per 100 km driven, clamped 0–100
+(documented in the report subtitle).
+
+## Dashboard
+
+`GET /dashboard?days=7` → 
+```jsonc
+{ "distanceByDay": [ { "date": "2026-10-16", "distance": 812.3 } ],
+  "alertsByType": { "overspeed": 12, ... }, "topVehicles": [ { "deviceId", "name", "distance" } ],
+  "driverScores": [ { "driverId"|null, "name", "score", "distance" } ],
+  "maintenance": { "dueSoon": 2, "overdue": 1 }, "reminders": { "dueSoon": 1, "overdue": 0 },
+  "expenses": { "total": 1234.5, "currency": "USD" },   // current month
+  "utilization": 0.42 }   // driving time / (vehicles × period), 0..1
+```
