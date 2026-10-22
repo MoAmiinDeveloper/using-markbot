@@ -32,6 +32,24 @@ cd web && npm install && npm run dev
 cd server && go run ./cmd/simulator -devices 25
 ```
 
+## Running on an Android phone (Termux)
+
+Install **Termux** and **Termux:API** from F-Droid (the Play Store versions are outdated), then:
+
+```sh
+pkg install -y git
+git clone -b claude/fleet-tracking-management-xli9z8 https://github.com/MoAmiinDeveloper/using-markbot.git
+cd using-markbot
+bash scripts/termux/setup.sh          # one time, ~10 min
+bash scripts/termux/start.sh --phone  # server + this phone as a live GPS tracker
+```
+
+Open http://localhost:8080 in the phone's browser. `--demo` adds 10 simulated vehicles.
+Grant Termux:API location permission when Android asks. The phone tracker reports as IMEI
+`350000000000001`; "ignition" means the phone is charging, so in a car charger it behaves
+like a real vehicle tracker. To track the phone against a server elsewhere:
+`server/bin/phonetracker -addr <server>:5027 -imei <15 digits>`.
+
 ## Configuring a Teltonika device
 
 In Teltonika Configurator → GPRS: set *Domain* to your server address, *Port* `5027`,
