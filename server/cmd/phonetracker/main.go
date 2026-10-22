@@ -250,7 +250,11 @@ func (t *tracker) readACK() (uint32, error) {
 func runJSON(ctx context.Context, timeout time.Duration, v any, name string, args ...string) error {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, name, args...).Output()
+	cmd := exec.CommandContext(ctx, name, args...)
+	// termux-* are shell wrappers around a helper that may outlive the
+	// killed wrapper and keep stdout open; don't wait on it forever.
+	cmd.WaitDelay = 2 * time.Second
+	out, err := cmd.Output()
 	if err != nil {
 		return fmt.Errorf("%s: %w (is the Termux:API app installed and location permission granted?)", name, err)
 	}
