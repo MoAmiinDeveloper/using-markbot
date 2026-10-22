@@ -97,3 +97,150 @@ fetch `/devices` once and then apply the stream.
 ## Health
 
 `GET /health` → `{"status":"ok"}` (no auth).
+
+---
+
+# Phase 2 additions
+
+## Device changes
+
+`Device` gains:
+```jsonc
+"speedLimit": 0,          // km/h, 0 = use global default from /settings
+"source": "direct",       // direct (connected to our gateway) | traccar (bridged, no commands)
+"commands": true          // whether the device can receive commands right now (direct + connected over TCP)
+```
+`speedLimit` is accepted by POST/PATCH `/devices`.
+
+Positions: `(device_id, device_time)` is unique; resent duplicates are ignored.
+
+## Events (alerts)
+
+```jsonc
+Event = {
+  "id": 991, "deviceId": 12,
+  "type": "geofenceEnter",   // geofenceEnter | geofenceExit | overspeed | ignitionOn | ignitionOff | alarm | commandResult
+  "time": "...",             // device time of the triggering fix
+  "lat": 25.2, "lng": 55.3,
+  "geofenceId": 3,           // only for geofence events, else null
+  "attributes": { "speed": 112, "limit": 100, "alarm": "sos", "geofenceName": "Depot" },
+  "message": "Truck 07 entered Depot"   // human readable, server-generated
+}
+```
+Rules (server side, evaluated in device-time order on new fixes only — records older than the
+last evaluated fix for that device are stored but don't fire events):
+- **geofence**: enter/exit when the fix moves into/out of a geofence that applies to the device.
+  Invalid fixes are ignored.
+- **overspeed**: speed > limit (device `speedLimit`, else global) continuously for
+  `overspeedMinDuration` seconds → one event; re-arms after speed drops below limit.
+- **ignitionOn / ignitionOff**: on change of `attributes.ignition`.
+- **alarm**: when `attributes.alarm` is present (sos, powerCut, towing, crash, jamming).
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/events?deviceId=&type=&from=&to=&limit=` | `Event[]` newest first, default last 7 days, limit default 200 (max 5000) |
+
+WebSocket: `{"type": "event", "data": Event}` for every new event.
+
+## Geofences
+
+```jsonc
+Geofence = {
+  "id": 3, "name": "Depot", "color": "#22c55e",
+  "type": "circle",                 // circle | polygon
+  "center": [55.27, 25.20],         // [lng, lat], circle only
+  "radius": 250,                    // meters, circle only
+  "polygon": [[lng, lat], ...],     // polygon only, ≥ 3 points, not closed (first != last)
+  "deviceIds": [],                  // empty = applies to all devices
+  "createdAt": "..."
+}
+```
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/geofences` | `Geofence[]` |
+| POST | `/geofences` | admin → 201 `Geofence` |
+| PATCH | `/geofences/{id}` | admin, any subset |
+| DELETE | `/geofences/{id}` | admin, 204 |
+
+WebSocket: `{"type": "geofences"}` (no data) whenever geofences change — client refetches.
+
+## Commands
+
+```jsonc
+Command = {
+  "id": 55, "deviceId": 12, "userId": 1,
+  "type": "engineStop",   // engineStop | engineResume | reboot | getInfo | getVersion | custom
+  "text": "setdigout 1",  // raw text sent to the device
+  "status": "queued",     // queued | sent | success | failed | expired
+  "response": "",         // device reply
+  "createdAt": "...", "completedAt": null
+}
+```
+Teltonika mapping: engineStop → `setdigout 1`, engineResume → `setdigout 0`, reboot → `cpureset`,
+getInfo → `getinfo`, getVersion → `getver`, custom → body `text`.
+If the device is not connected the command is `queued` and sent when it next connects (expires
+after 24h → `expired`). Bridged (`source: traccar`) devices reject commands with 409.
+
+| Method | Path | Notes |
+|---|---|---|
+| POST | `/devices/{id}/commands` | body `{"type": "...", "text": "..."}` → 202 `Command`. engineStop/engineResume/custom are admin only |
+| GET | `/devices/{id}/commands?limit=` | `Command[]` newest first |
+
+WebSocket: `{"type": "command", "data": Command}` on every status change.
+
+## Settings & notifications
+
+Global settings (admin):
+```jsonc
+Settings = {
+  "speedLimit": 100,              // km/h default
+  "overspeedMinDuration": 20,     // seconds
+  "telegramBotToken": "",         // write-only: GET returns "" and telegramConfigured instead
+  "telegramConfigured": true,     // read-only
+  "telegramBotUsername": "my_fleet_bot", // read-only, from getMe
+  "traccarToken": "a1b2..."       // token for the Traccar bridge URL; regenerate with POST below
+}
+```
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/settings` | any user (token fields only for admin) |
+| PATCH | `/settings` | admin |
+| POST | `/settings/traccar-token` | admin, regenerates → `Settings` |
+
+Per-user notification preferences:
+```jsonc
+NotificationPrefs = {
+  "telegramLinked": false,         // read-only
+  "push": { "enabled": true },     // read-only: has ≥1 push subscription
+  "events": {                      // per event type → channels
+    "geofenceEnter": {"inApp": true, "telegram": true, "push": true},
+    "geofenceExit":  {...}, "overspeed": {...}, "ignitionOn": {...}, "ignitionOff": {...}, "alarm": {...}
+  }
+}
+```
+| Method | Path | Notes |
+|---|---|---|
+| GET / PUT | `/me/notifications` | `NotificationPrefs` (PUT accepts `events` only) |
+| POST | `/me/telegram/link` | → `{"url": "https://t.me/<bot>?start=<code>", "expiresAt": "..."}`. User opens it and presses Start; server (long-polling getUpdates — works without a public URL) links the chat and sends WS `{"type":"notifications"}` |
+| DELETE | `/me/telegram` | unlink |
+| POST | `/me/notifications/test` | sends a test message on all linked channels |
+| GET | `/push/vapid-key` | `{"publicKey": "..."}` (VAPID keys generated once, stored in DB) |
+| POST | `/push/subscriptions` | body = browser `PushSubscription.toJSON()` → 201 |
+| DELETE | `/push/subscriptions` | body `{"endpoint": "..."}` → 204 |
+
+Push payload (JSON, read by the service worker): `{"title", "body", "url": "/live?device=12", "tag": "event-991"}`.
+
+## Traccar bridge
+
+`POST /ingest/traccar?token=<traccarToken>` — no JWT. Accepts Traccar's JSON position forwarding
+body `{"position": {...}, "device": {...}}`. Devices are matched/auto-registered by
+`device.uniqueId` with `source: "traccar"`, `protocol` from the position. Speed is converted from
+knots to km/h; common attributes are mapped to our normalized keys. Events/alerts run on bridged
+positions exactly like direct ones.
+
+Traccar config (`conf/traccar.xml`):
+```xml
+<entry key='forward.enable'>true</entry>
+<entry key='forward.url'>http://localhost:8080/api/v1/ingest/traccar?token=TOKEN</entry>
+<entry key='forward.json'>true</entry>
+```
