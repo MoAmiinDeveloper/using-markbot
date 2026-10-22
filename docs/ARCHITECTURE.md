@@ -27,8 +27,8 @@
 
 | Phase | Scope |
 |---|---|
-| **1 – Core tracking** *(this one)* | Teltonika Codec 8 / 8E / 16 over TCP+UDP, device registry, auth, live map, history playback, trips, device management, device simulator |
-| 2 – Fleet operations | Geofences (polygon/circle) + enter/exit events, alerts (overspeed, ignition, SOS, power cut, towing) with in-app + email/Telegram notifications, Codec 12 commands (engine block, reboot) from UI |
-| 3 – Reports & drivers | Trip/stop/idle/fuel/mileage reports with CSV/PDF export, drivers (iButton/RFID), maintenance schedules, groups & sub-users with per-device permissions |
-| 4 – Scale & multi-tenant | Companies/resellers (Trakzee-style white label), TimescaleDB, Redis pub/sub for multi-node, rate limiting, audit log |
-| 5 – More devices & mobile | Additional protocols (Queclink, Concox/GT06, Ruptela, Meitrack…), mobile app/PWA, public share links, OSRM route snapping |
+| 1 – Core tracking ✅ | Teltonika Codec 8 / 8E / 16 over TCP+UDP, device registry, auth, live map, history playback, trips, device management, device simulator |
+| 2 – Fleet operations ✅ | Geofences + enter/exit, alerts (overspeed, ignition, SOS, power cut, towing), in-app + Telegram + browser push, Codec 12 commands (engine block, reboot), Traccar bridge |
+| **3 – Trakzee-style operations** *(in progress)* | Reports centre (13 reports, CSV/Excel/PDF), dashboard analytics, drivers + behaviour scoring (harsh events), maintenance schedules, document reminders, expenses, roles (admin/manager/viewer) + vehicle groups, places (POIs) + street addresses, live-location share links |
+| 4 – Dispatch & scale | Jobs/dispatch with checkpoints + driver app, path (route) management + route deviation alerts, scheduled report delivery (email/Telegram), fuel & temperature sensor calibration, companies/resellers + white-label, billing/licence renewals, TimescaleDB, multi-node |
+| 5 – More devices & mobile | Concox/GT06, Queclink, Ruptela, Meitrack…, mobile app/PWA, video telematics |
