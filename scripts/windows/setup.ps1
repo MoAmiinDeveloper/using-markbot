@@ -28,31 +28,53 @@ if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
 
 Install-IfMissing go 'GoLang.Go'
 Install-IfMissing node 'OpenJS.NodeJS.LTS'
-if (-not (Find-Psql)) {
-  Write-Host '==> Installing PostgreSQL 17 (a Windows admin prompt may appear)'
-  winget install --id PostgreSQL.PostgreSQL.17 -e --accept-source-agreements --accept-package-agreements `
-    --override "--mode unattended --unattendedmodeui minimal --superpassword $PgSuperPassword --serverport 5432"
-}
-$Psql = Find-Psql
-if (-not $Psql) { throw 'PostgreSQL install not found under C:\Program Files\PostgreSQL' }
-
-Write-Host '==> Creating database'
-$env:PGPASSWORD = $PgSuperPassword
-$hasRole = & $Psql -U postgres -h localhost -tAc "SELECT 1 FROM pg_roles WHERE rolname='fleet'"
-if ($LASTEXITCODE -ne 0) {
-  throw 'Could not log in to PostgreSQL as "postgres". If it was installed before, set its password: $env:PG_SUPERPASSWORD="..." and re-run.'
-}
-if ($hasRole -ne '1') { & $Psql -U postgres -h localhost -qc "CREATE ROLE fleet LOGIN PASSWORD 'fleet'" }
-$hasDb = & $Psql -U postgres -h localhost -tAc "SELECT 1 FROM pg_database WHERE datname='fleet'"
-if ($hasDb -ne '1') { & $Psql -U postgres -h localhost -qc "CREATE DATABASE fleet OWNER fleet" }
-Remove-Item Env:PGPASSWORD
 
 $EnvFile = Join-Path $Root '.env'
+# $env:DATABASE_URL set (e.g. a free cloud Postgres such as Neon) = no local PostgreSQL.
+$UseExternalDb = [bool]$env:DATABASE_URL
+if ($UseExternalDb) {
+  Write-Host '==> Using external database from DATABASE_URL (skipping local PostgreSQL)'
+} else {
+  # The EnterpriseDB download server sometimes refuses mid-download; retry.
+  for ($i = 1; -not (Find-Psql) -and $i -le 3; $i++) {
+    Write-Host "==> Installing PostgreSQL 17, attempt $i (a Windows admin prompt may appear)"
+    winget install --id PostgreSQL.PostgreSQL.17 -e --accept-source-agreements --accept-package-agreements `
+      --override "--mode unattended --unattendedmodeui minimal --superpassword $PgSuperPassword --serverport 5432"
+  }
+  if (-not (Find-Psql)) {
+    throw @'
+PostgreSQL could not be downloaded (the EnterpriseDB server refused it).
+Use a free cloud database instead: create one at https://neon.tech, copy its connection string, then run
+(in cmd; keep the quotes):
+  set "DATABASE_URL=postgresql://user:pass@host/dbname?sslmode=require"
+  powershell -ExecutionPolicy Bypass -File scripts\windows\setup.ps1
+'@
+  }
+}
+
+if (-not $UseExternalDb) {
+  $Psql = Find-Psql
+  Write-Host '==> Creating database'
+  $env:PGPASSWORD = $PgSuperPassword
+  $hasRole = & $Psql -U postgres -h localhost -tAc "SELECT 1 FROM pg_roles WHERE rolname='fleet'"
+  if ($LASTEXITCODE -ne 0) {
+    throw 'Could not log in to PostgreSQL as "postgres". If it was installed before, set its password: $env:PG_SUPERPASSWORD="..." and re-run.'
+  }
+  if ($hasRole -ne '1') { & $Psql -U postgres -h localhost -qc "CREATE ROLE fleet LOGIN PASSWORD 'fleet'" }
+  $hasDb = & $Psql -U postgres -h localhost -tAc "SELECT 1 FROM pg_database WHERE datname='fleet'"
+  if ($hasDb -ne '1') { & $Psql -U postgres -h localhost -qc "CREATE DATABASE fleet OWNER fleet" }
+  Remove-Item Env:PGPASSWORD
+}
+
 if (-not (Test-Path $EnvFile)) {
   Write-Host '==> Writing .env (change ADMIN_PASSWORD here)'
   $secret = -join ((1..32) | ForEach-Object { '{0:x2}' -f (Get-Random -Maximum 256) })
   @("JWT_SECRET=$secret", 'ADMIN_EMAIL=admin@fleet.local', 'ADMIN_PASSWORD=admin', 'AUTO_REGISTER=true') |
     Set-Content -Encoding ascii $EnvFile
+}
+if ($UseExternalDb) {
+  $lines = @(Get-Content $EnvFile | Where-Object { $_ -notmatch '^\s*DATABASE_URL=' })
+  $lines + "DATABASE_URL=$($env:DATABASE_URL)" | Set-Content -Encoding ascii $EnvFile
 }
 
 Write-Host '==> Building web UI'
