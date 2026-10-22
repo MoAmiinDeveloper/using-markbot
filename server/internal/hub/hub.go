@@ -17,7 +17,7 @@ const DefaultBuffer = 256
 // Message is the envelope sent to clients, one JSON object per frame.
 type Message struct {
 	Type string `json:"type"`
-	Data any    `json:"data"`
+	Data any    `json:"data,omitempty"` // nil for notification-only messages
 }
 
 // Client is one subscriber. Read frames from C; when C is closed the client

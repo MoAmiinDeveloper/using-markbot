@@ -18,8 +18,12 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/moamiindeveloper/fleet/server/internal/commands"
 	"github.com/moamiindeveloper/fleet/server/internal/domain"
+	"github.com/moamiindeveloper/fleet/server/internal/events"
 	"github.com/moamiindeveloper/fleet/server/internal/hub"
+	"github.com/moamiindeveloper/fleet/server/internal/notify"
+	"github.com/moamiindeveloper/fleet/server/internal/protocol/teltonika"
 	"github.com/moamiindeveloper/fleet/server/internal/store"
 )
 
@@ -29,6 +33,7 @@ type env struct {
 	t     *testing.T
 	srv   *httptest.Server
 	store *store.Store
+	hub   *hub.Hub
 	token string // admin token
 }
 
@@ -68,11 +73,22 @@ func newEnv(t *testing.T, webDir string) *env {
 	if _, err := st.EnsureAdmin(ctx, "admin@fleet.local", "admin"); err != nil {
 		t.Fatal(err)
 	}
-	srv := httptest.NewServer(New(st, h, Config{JWTSecret: secret, CORSOrigins: "*", WebDir: webDir}))
+	nt, err := notify.New(ctx, st, notify.Options{TelegramAPIURL: "http://127.0.0.1:1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine := events.New(st, nt, nil)
+	cmds, err := commands.New(ctx, st, teltonika.NewHandler(), engine, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st.SetHooks(store.Hooks{Positions: engine.Process, Connected: cmds.DeviceConnected})
+	srv := httptest.NewServer(New(st, h, Config{JWTSecret: secret, CORSOrigins: "*", WebDir: webDir,
+		Notifier: nt, Commands: cmds}))
 	t.Cleanup(srv.Close)
 	t.Cleanup(h.Close) // runs before srv.Close so WebSocket handlers exit
 
-	e := &env{t: t, srv: srv, store: st}
+	e := &env{t: t, srv: srv, store: st, hub: h}
 	var login struct {
 		Token string     `json:"token"`
 		User  store.User `json:"user"`

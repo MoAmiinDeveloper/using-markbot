@@ -2,7 +2,10 @@ package store
 
 import (
 	"context"
+	"errors"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 
 	"github.com/moamiindeveloper/fleet/server/internal/domain"
 )
@@ -68,4 +71,26 @@ func (s *Store) Trips(ctx context.Context, deviceID int64, from, to time.Time) (
 		return nil, err
 	}
 	return det.Trips(), nil
+}
+
+// LatestPosition returns the newest stored fix of a device whose device
+// time is not in exclude, or nil when there is none.
+func (s *Store) LatestPosition(ctx context.Context, deviceID int64, exclude []time.Time) (*domain.Position, error) {
+	if exclude == nil {
+		exclude = []time.Time{}
+	}
+	p := domain.Position{DeviceID: deviceID}
+	err := s.pool.QueryRow(ctx, `SELECT device_time, server_time, lat, lng, altitude, speed, course,
+			satellites, valid, priority, event_id, attributes
+		FROM positions WHERE device_id = $1 AND device_time <> ALL ($2)
+		ORDER BY device_time DESC LIMIT 1`, deviceID, exclude).Scan(&p.DeviceTime, &p.ServerTime, &p.Latitude,
+		&p.Longitude, &p.Altitude, &p.Speed, &p.Course, &p.Satellites, &p.Valid, &p.Priority, &p.EventID, &p.Attributes)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	p.DeviceTime, p.ServerTime = p.DeviceTime.UTC(), p.ServerTime.UTC()
+	return &p, nil
 }

@@ -64,3 +64,13 @@ like a real vehicle tracker. To track the phone against a server elsewhere:
 In Teltonika Configurator → GPRS: set *Domain* to your server address, *Port* `5027`,
 *Protocol* TCP (or UDP). Codec 8 Extended is recommended (System → Data Protocol).
 Devices auto-register on first connection (`AUTO_REGISTER=true`); rename them in **Devices**.
+
+## Alerts, notifications & Traccar bridge
+
+- **Telegram**: create a bot with @BotFather and paste its token in **Settings**. The server
+  long-polls Telegram (no public URL needed); users link their chat from **Notifications**.
+- **Web Push**: VAPID keys are generated on first start. Set `VAPID_SUBJECT` to a contact
+  `mailto:` address. Browsers require HTTPS (or `localhost`) for push.
+- **Traccar**: devices on an existing Traccar server can be bridged in by enabling JSON
+  forwarding to `/api/v1/ingest/traccar?token=<token from Settings>` (see
+  [API contract](docs/API.md#traccar-bridge)). Bridged devices get alerts but no commands.

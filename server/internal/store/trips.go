@@ -64,7 +64,7 @@ func (d *TripDetector) Add(p TripPoint) {
 		d.cur = Trip{Start: p.Time, StartLat: p.Lat, StartLng: p.Lng}
 		d.last = p
 	} else {
-		d.cur.Distance += haversine(d.last.Lat, d.last.Lng, p.Lat, p.Lng)
+		d.cur.Distance += Haversine(d.last.Lat, d.last.Lng, p.Lat, p.Lng)
 		d.last = p
 	}
 	d.cur.MaxSpeed = max(d.cur.MaxSpeed, p.Speed)
@@ -112,8 +112,8 @@ func (d *TripDetector) finish(end TripPoint, dist float64) {
 
 const earthRadius = 6371008.8 // meters, mean radius
 
-// haversine returns the great-circle distance in meters.
-func haversine(lat1, lng1, lat2, lng2 float64) float64 {
+// Haversine returns the great-circle distance in meters.
+func Haversine(lat1, lng1, lat2, lng2 float64) float64 {
 	const rad = math.Pi / 180
 	dLat := (lat2 - lat1) * rad
 	dLng := (lng2 - lng1) * rad

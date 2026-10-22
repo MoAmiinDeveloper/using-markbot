@@ -22,7 +22,8 @@ ON CONFLICT (device_id) DO UPDATE SET
 
 const insertPositionSQL = `INSERT INTO positions (device_id, device_time, server_time, lat, lng, altitude,
 	speed, course, satellites, valid, priority, event_id, attributes)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+ON CONFLICT (device_id, device_time) DO NOTHING`
 
 // Authorize implements domain.Sink. Known IMEIs are resolved from memory;
 // unknown ones are registered when AutoRegister is enabled.
@@ -111,10 +112,39 @@ func (s *Store) Positions(ctx context.Context, batch []domain.Position) error {
 		}
 		b.Queue(upsertStateSQL, id, p.DeviceTime, js, now)
 	}
-	if err := s.pool.SendBatch(ctx, b).Close(); err != nil {
+	// Resent records hit the unique key and are skipped; inserted marks the rest.
+	inserted := make([]bool, len(ps))
+	br := s.pool.SendBatch(ctx, b)
+	for i := range ps {
+		tag, err := br.Exec()
+		if err != nil {
+			br.Close()
+			return fmt.Errorf("store positions: %w", err)
+		}
+		inserted[i] = tag.RowsAffected() == 1
+	}
+	if err := br.Close(); err != nil {
 		return fmt.Errorf("store positions: %w", err)
 	}
 
+	s.updateCache(ps, newest, now)
+
+	if s.hooks.Positions != nil {
+		fresh := make([]domain.Position, 0, len(ps))
+		for i := range ps {
+			if inserted[i] {
+				fresh = append(fresh, ps[i])
+			}
+		}
+		if len(fresh) > 0 {
+			s.hooks.Positions(ctx, fresh)
+		}
+	}
+	return nil
+}
+
+// updateCache advances the cached latest positions and publishes live updates.
+func (s *Store) updateCache(ps []domain.Position, newest map[int64]*domain.Position, now time.Time) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	touched := make(map[int64]*deviceEntry, len(newest))
@@ -134,7 +164,6 @@ func (s *Store) Positions(ctx context.Context, batch []domain.Position) error {
 		s.touchLocked(e, now)
 		s.announceLocked(e, now, false)
 	}
-	return nil
 }
 
 // touchLocked advances the cached last-seen time. Caller holds s.mu.
@@ -144,7 +173,8 @@ func (s *Store) touchLocked(e *deviceEntry, t time.Time) {
 	}
 }
 
-// Connection implements domain.Sink by recording the contact time.
+// Connection implements domain.Sink by recording the contact time and
+// tracking open sessions (which decide whether commands can be sent).
 func (s *Store) Connection(ctx context.Context, imei string, online bool, remoteAddr string) {
 	s.mu.RLock()
 	id, ok := s.byIMEI[imei]
@@ -162,9 +192,17 @@ func (s *Store) Connection(ctx context.Context, imei string, online bool, remote
 		s.log.Error("update last_seen", "id", id, "err", err)
 	}
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if e, ok := s.devices[id]; ok {
+		if online {
+			e.conns++
+		} else {
+			e.conns = max(0, e.conns-1)
+		}
 		s.touchLocked(e, now)
 		s.announceLocked(e, now, false)
+	}
+	s.mu.Unlock()
+	if online && s.hooks.Connected != nil {
+		s.hooks.Connected(ctx, id, imei)
 	}
 }

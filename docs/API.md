@@ -238,9 +238,27 @@ body `{"position": {...}, "device": {...}}`. Devices are matched/auto-registered
 knots to km/h; common attributes are mapped to our normalized keys. Events/alerts run on bridged
 positions exactly like direct ones.
 
-Traccar config (`conf/traccar.xml`):
+Traccar config (`conf/traccar.xml`, Traccar 5.x/6.x — verified against `Keys.java`; there is no
+`forward.enable`/`forward.json` key):
 ```xml
-<entry key='forward.enable'>true</entry>
+<entry key='forward.type'>json</entry>
 <entry key='forward.url'>http://localhost:8080/api/v1/ingest/traccar?token=TOKEN</entry>
-<entry key='forward.json'>true</entry>
 ```
+
+## Phase 2 implementation notes (clarifications, all additive)
+
+- **Geofence JSON**: `center`/`radius` are omitted for polygons and `polygon` for circles. A closed
+  ring (first point == last) is accepted and stored unclosed. `color` defaults to `#3b82f6`;
+  `#rgb` and `#rrggbb` are accepted. Unknown `deviceIds` → 400.
+- **Events**: `GET /events?type=` accepts a comma-separated list. Overspeed attributes also carry
+  `maxSpeed`; `commandResult` events carry `{commandId, commandType, status, response}`.
+  `commandResult` is in-app only (it has no entry in `NotificationPrefs.events`). A device's very
+  first fix only establishes geofence/ignition state (no enter/ignition events), but alarms on it fire.
+- **Commands**: `userId` is `0` when the issuing user was deleted. Commands left `sent` when the
+  server stopped are marked `failed` on the next start.
+- **Settings**: `PATCH /settings` with `telegramBotToken` validates it with Telegram `getMe`
+  (400 if rejected, 502 if Telegram is unreachable); `""` removes the bot.
+- **`POST /me/notifications/test`** → `{"telegram": true, "push": 1}` (delivered to the linked chat /
+  number of push subscriptions that accepted it).
+- **Traccar bridge**: wrong/missing token → 401; unparsable body → 400; with `AUTO_REGISTER=false`
+  unknown devices are acknowledged with `{"status": "ignored"}` (200) so Traccar does not retry.

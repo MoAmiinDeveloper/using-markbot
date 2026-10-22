@@ -38,11 +38,11 @@ func (tr *track) trips() []Trip {
 func ptr(b bool) *bool { return &b }
 
 func TestHaversine(t *testing.T) {
-	got := haversine(0, 0, 1, 0)
+	got := Haversine(0, 0, 1, 0)
 	if math.Abs(got-111195) > 1 {
 		t.Fatalf("1 degree of latitude = %.1f m, want ~111195", got)
 	}
-	if haversine(25, 55, 25, 55) != 0 {
+	if Haversine(25, 55, 25, 55) != 0 {
 		t.Fatal("same point should be 0")
 	}
 }

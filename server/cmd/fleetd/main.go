@@ -21,8 +21,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/moamiindeveloper/fleet/server/internal/api"
+	"github.com/moamiindeveloper/fleet/server/internal/commands"
+	"github.com/moamiindeveloper/fleet/server/internal/events"
 	"github.com/moamiindeveloper/fleet/server/internal/gateway"
 	"github.com/moamiindeveloper/fleet/server/internal/hub"
+	"github.com/moamiindeveloper/fleet/server/internal/notify"
 	"github.com/moamiindeveloper/fleet/server/internal/protocol/teltonika"
 	"github.com/moamiindeveloper/fleet/server/internal/store"
 )
@@ -40,6 +43,8 @@ type config struct {
 	CORSOrigins   string
 	LogLevel      slog.Level
 	LogFormat     string
+	TelegramAPI   string
+	VAPIDSubject  string
 }
 
 func loadConfig() (config, error) {
@@ -53,6 +58,8 @@ func loadConfig() (config, error) {
 		WebDir:        env("WEB_DIR", "../web/dist"),
 		CORSOrigins:   env("CORS_ORIGIN", "*"),
 		LogFormat:     strings.ToLower(env("LOG_FORMAT", "text")),
+		TelegramAPI:   env("TELEGRAM_API_URL", notify.DefaultTelegramAPIURL),
+		VAPIDSubject:  env("VAPID_SUBJECT", notify.DefaultVAPIDSubject),
 	}
 	var err error
 	if c.AutoRegister, err = strconv.ParseBool(env("AUTO_REGISTER", "true")); err != nil {
@@ -66,6 +73,9 @@ func loadConfig() (config, error) {
 	}
 	if c.LogFormat != "text" && c.LogFormat != "json" {
 		return c, errors.New("LOG_FORMAT must be text or json")
+	}
+	if !strings.HasPrefix(c.VAPIDSubject, "mailto:") && !strings.HasPrefix(c.VAPIDSubject, "https://") {
+		return c, errors.New("VAPID_SUBJECT must be a mailto: or https:// URL")
 	}
 	return c, nil
 }
@@ -123,6 +133,22 @@ func run(cfg config, log *slog.Logger) error {
 		log.Info("created default admin", "email", cfg.AdminEmail)
 	}
 
+	tel := teltonika.NewHandler()
+	notifier, err := notify.New(ctx, st, notify.Options{
+		TelegramAPIURL: cfg.TelegramAPI,
+		VAPIDSubject:   cfg.VAPIDSubject,
+		Logger:         log.With("component", "notify"),
+	})
+	if err != nil {
+		return err
+	}
+	engine := events.New(st, notifier, log.With("component", "events"))
+	cmds, err := commands.New(ctx, st, tel, engine, log.With("component", "commands"))
+	if err != nil {
+		return err
+	}
+	st.SetHooks(store.Hooks{Positions: engine.Process, Connected: cmds.DeviceConnected})
+
 	secret := []byte(cfg.JWTSecret)
 	if len(secret) == 0 {
 		secret = make([]byte, 32)
@@ -137,6 +163,8 @@ func run(cfg config, log *slog.Logger) error {
 			JWTSecret:   secret,
 			CORSOrigins: cfg.CORSOrigins,
 			WebDir:      cfg.WebDir,
+			Notifier:    notifier,
+			Commands:    cmds,
 			Logger:      log.With("component", "api"),
 		}),
 		ReadHeaderTimeout: 10 * time.Second,
@@ -147,8 +175,11 @@ func run(cfg config, log *slog.Logger) error {
 	defer cancel(nil)
 
 	go st.Run(ctx)
+	bgDone := make(chan struct{}, 2)
+	go func() { notifier.Run(ctx); bgDone <- struct{}{} }()
+	go func() { cmds.Run(ctx); bgDone <- struct{}{} }()
 
-	gw := gateway.New(st, log, gateway.Listener{Protocol: teltonika.New(), TCPAddr: cfg.TeltonikaAddr, UDPAddr: cfg.TeltonikaAddr})
+	gw := gateway.New(st, log, gateway.Listener{Protocol: tel, TCPAddr: cfg.TeltonikaAddr, UDPAddr: cfg.TeltonikaAddr})
 	gwDone := make(chan struct{})
 	go func() {
 		defer close(gwDone)
@@ -175,6 +206,8 @@ func run(cfg config, log *slog.Logger) error {
 		log.Warn("http shutdown", "err", err)
 	}
 	<-gwDone
+	<-bgDone
+	<-bgDone
 
 	if errors.Is(cause, context.Canceled) { // signal
 		return nil

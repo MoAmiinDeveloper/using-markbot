@@ -15,6 +15,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -50,6 +51,12 @@ const (
 	EventDeleted  = "deleted"
 )
 
+// Device sources: connected to our gateway, or bridged from a Traccar server.
+const (
+	SourceDirect  = "direct"
+	SourceTraccar = "traccar"
+)
+
 // Publisher receives live events. *hub.Hub implements it. Publish must not block.
 type Publisher interface {
 	Publish(msgType string, data any)
@@ -71,26 +78,31 @@ type Options struct {
 
 // Device is the API representation of a tracker together with its live state.
 type Device struct {
-	ID        int64            `json:"id"`
-	Name      string           `json:"name"`
-	IMEI      string           `json:"imei"`
-	Protocol  string           `json:"protocol"`
-	Plate     string           `json:"plate"`
-	Model     string           `json:"model"`
-	Category  string           `json:"category"`
-	Phone     string           `json:"phone"`
-	Status    string           `json:"status"`
-	LastSeen  *time.Time       `json:"lastSeen"`
-	Position  *domain.Position `json:"position"`
-	CreatedAt time.Time        `json:"createdAt"`
-	UpdatedAt time.Time        `json:"updatedAt"`
+	ID         int64            `json:"id"`
+	Name       string           `json:"name"`
+	IMEI       string           `json:"imei"`
+	Protocol   string           `json:"protocol"`
+	Plate      string           `json:"plate"`
+	Model      string           `json:"model"`
+	Category   string           `json:"category"`
+	Phone      string           `json:"phone"`
+	SpeedLimit float64          `json:"speedLimit"` // km/h, 0 = global default from Settings
+	Source     string           `json:"source"`     // direct | traccar
+	Commands   bool             `json:"commands"`   // can receive commands now (direct, connected over TCP)
+	Status     string           `json:"status"`
+	LastSeen   *time.Time       `json:"lastSeen"`
+	Position   *domain.Position `json:"position"`
+	CreatedAt  time.Time        `json:"createdAt"`
+	UpdatedAt  time.Time        `json:"updatedAt"`
 }
 
 // deviceEntry is the cached state of one device. Positions referenced from
 // the cache are never mutated after insertion, so they can be shared.
 type deviceEntry struct {
-	dev        Device // Status is ignored; computed on read
-	lastStatus string // last status announced to the hub
+	dev          Device // Status and Commands are ignored; computed on read
+	conns        int    // open TCP sessions (a reconnect briefly overlaps the old one)
+	lastStatus   string // last status announced to the hub
+	lastCommands bool   // last Commands value announced to the hub
 }
 
 // Store is the PostgreSQL-backed repository and domain.Sink. It is safe for
@@ -100,10 +112,30 @@ type Store struct {
 	opts Options
 	log  *slog.Logger
 
+	hooks Hooks
+
 	mu      sync.RWMutex
 	devices map[int64]*deviceEntry
 	byIMEI  map[string]int64
+
+	geofences atomic.Pointer[[]Geofence] // immutable snapshot, swapped on change
+
+	settingsMu sync.RWMutex
+	settings   Settings
 }
+
+// Hooks lets services observe ingest. Callbacks run synchronously on the
+// ingest path and must return quickly.
+type Hooks struct {
+	// Positions receives the fixes of one batch that were newly stored
+	// (resent duplicates are skipped), sorted by device time.
+	Positions func(ctx context.Context, ps []domain.Position)
+	// Connected is called when a device opens a TCP session.
+	Connected func(ctx context.Context, deviceID int64, imei string)
+}
+
+// SetHooks installs ingest observers. Call it before ingest starts.
+func (s *Store) SetHooks(h Hooks) { s.hooks = h }
 
 var _ domain.Sink = (*Store)(nil)
 
@@ -131,14 +163,21 @@ func New(ctx context.Context, pool *pgxpool.Pool, opts Options) (*Store, error) 
 	if err := s.loadCache(ctx); err != nil {
 		return nil, fmt.Errorf("load devices: %w", err)
 	}
+	if err := s.loadGeofences(ctx); err != nil {
+		return nil, fmt.Errorf("load geofences: %w", err)
+	}
+	if err := s.loadSettings(ctx); err != nil {
+		return nil, fmt.Errorf("load settings: %w", err)
+	}
 	return s, nil
 }
 
-const deviceColumns = `d.id, d.name, d.imei, d.protocol, d.plate, d.model, d.category, d.phone, d.created_at, d.updated_at`
+const deviceColumns = `d.id, d.name, d.imei, d.protocol, d.plate, d.model, d.category, d.phone,
+	d.speed_limit, d.source, d.created_at, d.updated_at`
 
 func scanDevice(row pgx.Row, extra ...any) (Device, error) {
 	var d Device
-	dst := append([]any{&d.ID, &d.Name, &d.IMEI, &d.Protocol, &d.Plate, &d.Model, &d.Category, &d.Phone, &d.CreatedAt, &d.UpdatedAt}, extra...)
+	dst := append([]any{&d.ID, &d.Name, &d.IMEI, &d.Protocol, &d.Plate, &d.Model, &d.Category, &d.Phone, &d.SpeedLimit, &d.Source, &d.CreatedAt, &d.UpdatedAt}, extra...)
 	if err := row.Scan(dst...); err != nil {
 		return d, err
 	}
@@ -210,6 +249,7 @@ func ignitionOn(attrs map[string]any) bool {
 func (s *Store) view(e *deviceEntry, now time.Time) Device {
 	d := e.dev
 	d.Status = s.status(&d, now)
+	d.Commands = d.Source == SourceDirect && e.conns > 0
 	return d
 }
 
@@ -310,12 +350,12 @@ func (s *Store) announceStatusChanges() {
 }
 
 // announceLocked publishes e as a "device" event when force is set or its
-// status changed since the last announcement. Events are published while
+// status or command availability changed since the last announcement. Events are published while
 // s.mu is held so their order always matches the cache (Publish never blocks).
 func (s *Store) announceLocked(e *deviceEntry, now time.Time, force bool) {
 	d := s.view(e, now)
-	if force || d.Status != e.lastStatus {
-		e.lastStatus = d.Status
+	if force || d.Status != e.lastStatus || d.Commands != e.lastCommands {
+		e.lastStatus, e.lastCommands = d.Status, d.Commands
 		s.publish(EventDevice, d)
 	}
 }

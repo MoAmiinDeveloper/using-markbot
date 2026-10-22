@@ -14,7 +14,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
+	"github.com/moamiindeveloper/fleet/server/internal/commands"
 	"github.com/moamiindeveloper/fleet/server/internal/hub"
+	"github.com/moamiindeveloper/fleet/server/internal/notify"
 	"github.com/moamiindeveloper/fleet/server/internal/store"
 )
 
@@ -29,7 +31,11 @@ type Config struct {
 	CORSOrigins string
 	// WebDir holds the built SPA; ignored when it does not exist.
 	WebDir string
-	Logger *slog.Logger
+	// Notifier backs the Telegram/push endpoints and Commands the device
+	// command endpoints; both are required for those routes.
+	Notifier *notify.Service
+	Commands *commands.Service
+	Logger   *slog.Logger
 }
 
 // Server holds the API dependencies.
@@ -75,6 +81,7 @@ func (s *Server) routes() http.Handler {
 			r.Use(compress)
 			r.Get("/health", s.handleHealth)
 			r.Post("/auth/login", s.handleLogin)
+			r.Post("/ingest/traccar", s.handleTraccar) // authenticated by ?token=
 
 			r.Group(func(r chi.Router) {
 				r.Use(s.authenticate)
@@ -84,12 +91,30 @@ func (s *Server) routes() http.Handler {
 				r.Get("/devices/{id}", s.handleGetDevice)
 				r.Get("/devices/{id}/positions", s.handlePositions)
 				r.Get("/devices/{id}/trips", s.handleTrips)
+				r.Get("/devices/{id}/commands", s.handleListCommands)
+				r.Post("/devices/{id}/commands", s.handleCreateCommand) // per-type admin check inside
+				r.Get("/events", s.handleEvents)
+				r.Get("/geofences", s.handleListGeofences)
+				r.Get("/settings", s.handleGetSettings)
+				r.Get("/me/notifications", s.handleGetNotifications)
+				r.Put("/me/notifications", s.handlePutNotifications)
+				r.Post("/me/notifications/test", s.handleTestNotification)
+				r.Post("/me/telegram/link", s.handleTelegramLink)
+				r.Delete("/me/telegram", s.handleTelegramUnlink)
+				r.Get("/push/vapid-key", s.handleVAPIDKey)
+				r.Post("/push/subscriptions", s.handleAddPushSubscription)
+				r.Delete("/push/subscriptions", s.handleDeletePushSubscription)
 
 				r.Group(func(r chi.Router) {
 					r.Use(requireAdmin)
 					r.Post("/devices", s.handleCreateDevice)
 					r.Patch("/devices/{id}", s.handleUpdateDevice)
 					r.Delete("/devices/{id}", s.handleDeleteDevice)
+					r.Post("/geofences", s.handleCreateGeofence)
+					r.Patch("/geofences/{id}", s.handleUpdateGeofence)
+					r.Delete("/geofences/{id}", s.handleDeleteGeofence)
+					r.Patch("/settings", s.handlePatchSettings)
+					r.Post("/settings/traccar-token", s.handleRegenerateTraccarToken)
 				})
 			})
 		})
@@ -136,14 +161,24 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 
 // fail maps a store error to an HTTP response.
 func (s *Server) fail(w http.ResponseWriter, r *http.Request, err error) {
+	s.failAs(w, r, err, "device not found")
+}
+
+// failAs is fail with the message used for store.ErrNotFound.
+func (s *Server) failAs(w http.ResponseWriter, r *http.Request, err error, notFound string) {
 	var ve *store.ValidationError
 	switch {
 	case errors.As(err, &ve):
 		writeError(w, http.StatusBadRequest, ve.Msg)
 	case errors.Is(err, store.ErrNotFound):
-		writeError(w, http.StatusNotFound, "device not found")
-	case errors.Is(err, store.ErrDuplicateIMEI):
+		writeError(w, http.StatusNotFound, notFound)
+	case errors.Is(err, commands.ErrForbidden):
+		writeError(w, http.StatusForbidden, err.Error())
+	case errors.Is(err, store.ErrDuplicateIMEI), errors.Is(err, commands.ErrUnsupported),
+		errors.Is(err, notify.ErrTelegramNotConfigured):
 		writeError(w, http.StatusConflict, err.Error())
+	case errors.Is(err, notify.ErrTelegramUnavailable):
+		writeError(w, http.StatusBadGateway, err.Error())
 	default:
 		s.log.ErrorContext(r.Context(), "request failed", "method", r.Method, "path", r.URL.Path, "err", err)
 		writeError(w, http.StatusInternalServerError, "internal server error")

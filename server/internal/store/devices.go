@@ -41,6 +41,10 @@ type DeviceInput struct {
 	Model    string `json:"model"`
 	Category string `json:"category"`
 	Phone    string `json:"phone"`
+	// SpeedLimit in km/h, 0 = global default.
+	SpeedLimit float64 `json:"speedLimit"`
+
+	source string // existing device's source; bridged devices skip IMEI/protocol rules
 }
 
 // DevicePatch is a partial update; nil fields are left unchanged.
@@ -52,6 +56,8 @@ type DevicePatch struct {
 	Model    *string `json:"model"`
 	Category *string `json:"category"`
 	Phone    *string `json:"phone"`
+
+	SpeedLimit *float64 `json:"speedLimit"`
 }
 
 func (p DevicePatch) apply(in *DeviceInput) {
@@ -67,6 +73,9 @@ func (p DevicePatch) apply(in *DeviceInput) {
 	set(&in.Model, p.Model)
 	set(&in.Category, p.Category)
 	set(&in.Phone, p.Phone)
+	if p.SpeedLimit != nil {
+		in.SpeedLimit = *p.SpeedLimit
+	}
 }
 
 // Normalize trims fields, applies defaults and validates the input.
@@ -76,6 +85,7 @@ func (in *DeviceInput) Normalize() error {
 	}
 	in.Protocol = strings.ToLower(in.Protocol)
 	in.Category = strings.ToLower(in.Category)
+	bridged := in.source == SourceTraccar
 	if in.Protocol == "" {
 		in.Protocol = defaultProtocol
 	}
@@ -87,7 +97,7 @@ func (in *DeviceInput) Normalize() error {
 		return invalid("name is required")
 	case utf8.RuneCountInString(in.Name) > 100:
 		return invalid("name must be at most 100 characters")
-	case !slices.Contains(Protocols, in.Protocol):
+	case !bridged && !slices.Contains(Protocols, in.Protocol):
 		return invalid("protocol must be one of: %s", strings.Join(Protocols, ", "))
 	case !slices.Contains(Categories, in.Category):
 		return invalid("category must be one of: %s", strings.Join(Categories, ", "))
@@ -97,6 +107,11 @@ func (in *DeviceInput) Normalize() error {
 		return invalid("model must be at most 64 characters")
 	case utf8.RuneCountInString(in.Phone) > 32:
 		return invalid("phone must be at most 32 characters")
+	case !(in.SpeedLimit >= 0 && in.SpeedLimit <= 500): // also rejects NaN
+		return invalid("speedLimit must be between 0 and 500 km/h")
+	}
+	if bridged {
+		return validateUniqueID(in.IMEI)
 	}
 	return ValidateIMEI(in.Protocol, in.IMEI)
 }
@@ -117,6 +132,18 @@ func ValidateIMEI(protocol, imei string) error {
 	return nil
 }
 
+// validateUniqueID checks the identifier of a bridged (Traccar) device, which
+// may be any short printable string.
+func validateUniqueID(id string) error {
+	switch {
+	case id == "":
+		return invalid("imei is required")
+	case len(id) > 64 || strings.ContainsFunc(id, func(r rune) bool { return r < 0x21 || r == 0x7f }):
+		return invalid("unique id must be at most 64 printable characters without spaces")
+	}
+	return nil
+}
+
 func isUniqueViolation(err error) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == "23505"
@@ -127,9 +154,9 @@ func (s *Store) CreateDevice(ctx context.Context, in DeviceInput) (Device, error
 	if err := in.Normalize(); err != nil {
 		return Device{}, err
 	}
-	row := s.pool.QueryRow(ctx, `INSERT INTO devices AS d (name, imei, protocol, plate, model, category, phone)
-		VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING `+deviceColumns,
-		in.Name, in.IMEI, in.Protocol, in.Plate, in.Model, in.Category, in.Phone)
+	row := s.pool.QueryRow(ctx, `INSERT INTO devices AS d (name, imei, protocol, plate, model, category, phone, speed_limit)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING `+deviceColumns,
+		in.Name, in.IMEI, in.Protocol, in.Plate, in.Model, in.Category, in.Phone, in.SpeedLimit)
 	d, err := scanDevice(row)
 	if isUniqueViolation(err) {
 		return Device{}, ErrDuplicateIMEI
@@ -163,15 +190,15 @@ func (s *Store) UpdateDevice(ctx context.Context, id int64, p DevicePatch) (Devi
 		return Device{}, err
 	}
 	in := DeviceInput{Name: cur.Name, IMEI: cur.IMEI, Protocol: cur.Protocol, Plate: cur.Plate,
-		Model: cur.Model, Category: cur.Category, Phone: cur.Phone}
+		Model: cur.Model, Category: cur.Category, Phone: cur.Phone, SpeedLimit: cur.SpeedLimit, source: cur.Source}
 	p.apply(&in)
 	if err := in.Normalize(); err != nil {
 		return Device{}, err
 	}
 	row := s.pool.QueryRow(ctx, `UPDATE devices AS d SET name = $2, imei = $3, protocol = $4, plate = $5,
-			model = $6, category = $7, phone = $8, updated_at = now()
+			model = $6, category = $7, phone = $8, speed_limit = $9, updated_at = now()
 		WHERE id = $1 RETURNING `+deviceColumns,
-		id, in.Name, in.IMEI, in.Protocol, in.Plate, in.Model, in.Category, in.Phone)
+		id, in.Name, in.IMEI, in.Protocol, in.Plate, in.Model, in.Category, in.Phone, in.SpeedLimit)
 	d, err := scanDevice(row)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
@@ -197,6 +224,41 @@ func (s *Store) UpdateDevice(ctx context.Context, id int64, p DevicePatch) (Devi
 	e.dev = d
 	s.announceLocked(e, now, true)
 	return s.view(e, now), nil
+}
+
+// EnsureBridgedDevice returns the device with the given unique id, creating
+// it with source "traccar" when unknown and AutoRegister is enabled (else
+// ErrUnknownDevice). An existing device keeps its source.
+func (s *Store) EnsureBridgedDevice(ctx context.Context, uniqueID, protocol, name string) (Device, error) {
+	s.mu.RLock()
+	id, ok := s.byIMEI[uniqueID]
+	s.mu.RUnlock()
+	if ok {
+		return s.Device(id)
+	}
+	if !s.opts.AutoRegister {
+		return Device{}, fmt.Errorf("%w: %s", ErrUnknownDevice, uniqueID)
+	}
+	if err := validateUniqueID(uniqueID); err != nil {
+		return Device{}, err
+	}
+	name = strings.TrimSpace(name)
+	if name == "" || utf8.RuneCountInString(name) > 100 {
+		name = "Device " + uniqueID[max(0, len(uniqueID)-6):]
+	}
+	protocol = strings.ToLower(strings.TrimSpace(protocol))
+	if protocol == "" {
+		protocol = "traccar"
+	}
+	row := s.pool.QueryRow(ctx, `INSERT INTO devices AS d (name, imei, protocol, source) VALUES ($1, $2, $3, $4)
+		ON CONFLICT (imei) DO UPDATE SET imei = EXCLUDED.imei RETURNING `+deviceColumns,
+		name, uniqueID, protocol, SourceTraccar)
+	d, err := scanDevice(row)
+	if err != nil {
+		return Device{}, fmt.Errorf("register bridged device %s: %w", uniqueID, err)
+	}
+	s.log.Info("registered bridged device", "id", d.ID, "uniqueId", uniqueID, "protocol", protocol)
+	return s.cacheNewDevice(d), nil
 }
 
 // DeleteDevice removes a device together with its positions and state.

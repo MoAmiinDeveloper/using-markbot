@@ -20,7 +20,7 @@
   (persisted). On error the device keeps the records and resends.
 * **Speed.** Go goroutine per connection, pgx batch inserts, latest state cached in memory,
   WebSocket fan-out from memory (no DB round-trip for live view).
-* **Storage.** PostgreSQL. `positions` indexed by `(device_id, device_time)`. Ready to move to
+* **Storage.** PostgreSQL. `positions` unique on `(device_id, device_time)` (resends are ignored). Ready to move to
   TimescaleDB hypertables / partitioning when volume requires (Phase 4).
 
 ## Phases
