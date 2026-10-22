@@ -27,6 +27,9 @@ import { Button, IconButton } from '@/components/ui/Button'
 import { StatusPill } from '@/components/ui/Misc'
 import { cn } from '@/lib/cn'
 import { SignalBars, SpeedGauge } from './SpeedGauge'
+import { SourceBadge } from '@/components/ui/SourceBadge'
+import { CommandsSection } from './Commands'
+import { RecentAlerts } from './RecentAlerts'
 
 function Metric({ icon, label, value, accent }: { icon: ReactNode; label: string; value: ReactNode; accent?: string }) {
   return (
@@ -107,6 +110,7 @@ export function DeviceDetail({
               </span>
             )}
             <span>{categoryMeta(device.category).label}</span>
+            <SourceBadge source={device.source} />
           </div>
         </div>
         <IconButton label="Close details" onClick={onClose} size="sm">
@@ -142,7 +146,9 @@ export function DeviceDetail({
             This device hasn’t reported a position yet.
             <div className="mt-1 font-mono text-[11.5px]">IMEI {device.imei}</div>
           </div>
-        ) : (
+        ) : null}
+        {!p && <CommandsSection device={device} />}
+        {p && (
           <>
             <div className="flex items-center gap-2 rounded-2xl border border-slate-200/80 bg-white/60 py-1 pl-1 pr-4 dark:border-white/[0.06] dark:bg-white/[0.025]">
               <SpeedGauge speed={p.speed} />
@@ -219,6 +225,9 @@ export function DeviceDetail({
                 )}
               </dl>
             </div>
+
+            <RecentAlerts deviceId={device.id} />
+            <CommandsSection device={device} />
 
             <div className="mt-3 overflow-hidden rounded-xl border border-slate-200/80 dark:border-white/[0.06]">
               <button

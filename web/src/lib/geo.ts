@@ -36,3 +36,51 @@ export function boundsOf(points: Array<[number, number]>): LngLatBoundsLike | nu
     [maxX, maxY],
   ]
 }
+
+/** Destination point given start, distance (m) and bearing (deg). Returns [lng, lat]. */
+export function destination(lng: number, lat: number, meters: number, brg: number): [number, number] {
+  const d = meters / R
+  const b = rad(brg)
+  const φ1 = rad(lat)
+  const λ1 = rad(lng)
+  const φ2 = Math.asin(Math.sin(φ1) * Math.cos(d) + Math.cos(φ1) * Math.sin(d) * Math.cos(b))
+  const λ2 = λ1 + Math.atan2(Math.sin(b) * Math.sin(d) * Math.cos(φ1), Math.cos(d) - Math.sin(φ1) * Math.sin(φ2))
+  return [(((λ2 * 180) / Math.PI + 540) % 360) - 180, (φ2 * 180) / Math.PI]
+}
+
+/** Approximate a geodesic circle as a closed polygon ring of [lng, lat]. */
+export function circleRing(center: [number, number], radius: number, steps = 72): Array<[number, number]> {
+  const ring: Array<[number, number]> = []
+  for (let i = 0; i < steps; i++) ring.push(destination(center[0], center[1], radius, (i * 360) / steps))
+  ring.push(ring[0])
+  return ring
+}
+
+/** Area of a (non-closed) [lng, lat] ring in m² (spherical excess approximation, fine for geofences). */
+export function ringArea(ring: Array<[number, number]>): number {
+  if (ring.length < 3) return 0
+  let sum = 0
+  for (let i = 0; i < ring.length; i++) {
+    const [x1, y1] = ring[i]
+    const [x2, y2] = ring[(i + 1) % ring.length]
+    sum += rad(x2 - x1) * (2 + Math.sin(rad(y1)) + Math.sin(rad(y2)))
+  }
+  return Math.abs((sum * R * R) / 2)
+}
+
+/** Simple vertex-average centroid (good enough for label placement on compact shapes). */
+export function ringCentroid(ring: Array<[number, number]>): [number, number] {
+  let x = 0
+  let y = 0
+  for (const [a, b] of ring) {
+    x += a
+    y += b
+  }
+  return [x / ring.length, y / ring.length]
+}
+
+export function fmtArea(m2: number): string {
+  if (m2 < 10_000) return `${Math.round(m2).toLocaleString()} m²`
+  if (m2 < 1_000_000) return `${(m2 / 10_000).toFixed(1)} ha`
+  return `${(m2 / 1_000_000).toFixed(m2 < 10_000_000 ? 2 : 1)} km²`
+}

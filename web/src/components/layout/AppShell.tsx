@@ -1,7 +1,9 @@
 import { useEffect } from 'react'
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
-import { useQueryClient } from '@tanstack/react-query'
-import { api } from '@/api/client'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { api, qk } from '@/api/client'
+import { useAlerts } from '@/store/alerts'
+import { installAudioUnlock } from '@/lib/sound'
 import { useAuth } from '@/store/auth'
 import { liveConnection } from '@/store/connection'
 import { startClock } from '@/store/now'
@@ -14,10 +16,25 @@ export function AppShell() {
   const setUser = useAuth((s) => s.setUser)
   const loc = useLocation()
   const qc = useQueryClient()
+  const userId = useAuth((s) => s.user?.id ?? null)
+
+  useEffect(() => {
+    useAlerts.getState().setUser(userId)
+  }, [userId])
+
+  // notification preferences decide which live events toast; cached for the connection to read
+  useQuery({
+    queryKey: qk.notificationPrefs,
+    queryFn: api.notificationPrefs,
+    enabled: !!token,
+    staleTime: 5 * 60_000,
+    meta: { silent: true },
+  })
 
   useEffect(() => {
     if (!token) return
     startClock()
+    installAudioUnlock()
     liveConnection.start(token)
     api.me().then(setUser, () => {
       /* 401 handled by client */

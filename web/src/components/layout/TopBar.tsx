@@ -7,6 +7,7 @@ import { IconButton } from '@/components/ui/Button'
 import { ConnectionBadge } from './ConnectionBadge'
 import { GlobalSearch } from './GlobalSearch'
 import { LogoMark } from './Logo'
+import { NotificationBell } from './NotificationBell'
 
 function initials(name: string) {
   return (
@@ -103,7 +104,10 @@ export function TopBar({ title }: { title: string }) {
       <GlobalSearch className="max-w-md flex-1" />
       <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
         <ConnectionBadge compact />
-        <ThemeToggle />
+        <span className="hidden sm:contents">
+          <ThemeToggle />
+        </span>
+        <NotificationBell />
         <UserMenu />
       </div>
     </header>

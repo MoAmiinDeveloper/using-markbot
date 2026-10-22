@@ -1,6 +1,25 @@
 import { API_BASE } from '@/config'
 import { useAuth } from '@/store/auth'
-import type { Device, DeviceInput, LoginResponse, Position, Summary, Trip, User } from './types'
+import type {
+  Command,
+  CommandType,
+  Device,
+  DeviceInput,
+  EventQuery,
+  FleetEvent,
+  Geofence,
+  GeofenceInput,
+  LoginResponse,
+  NotificationPrefs,
+  Position,
+  Settings,
+  SettingsPatch,
+  Summary,
+  TelegramLink,
+  TestNotificationResult,
+  Trip,
+  User,
+} from './types'
 
 export class ApiError extends Error {
   constructor(
@@ -80,6 +99,50 @@ export const api = {
     request<Trip[]>('GET', `/devices/${id}/trips`, undefined, { from, to }),
 
   summary: () => request<Summary>('GET', '/summary'),
+
+  // ---- Phase 2
+  events: (q: EventQuery = {}) =>
+    request<FleetEvent[]>('GET', '/events', undefined, {
+      deviceId: q.deviceId,
+      type: q.type,
+      from: q.from,
+      to: q.to,
+      limit: q.limit,
+    }),
+
+  geofences: () => request<Geofence[]>('GET', '/geofences'),
+  createGeofence: (input: GeofenceInput) => request<Geofence>('POST', '/geofences', input),
+  updateGeofence: (id: number, input: Partial<GeofenceInput>) => request<Geofence>('PATCH', `/geofences/${id}`, input),
+  deleteGeofence: (id: number) => request<void>('DELETE', `/geofences/${id}`),
+
+  commands: (deviceId: number, limit = 20) =>
+    request<Command[]>('GET', `/devices/${deviceId}/commands`, undefined, { limit }),
+  sendCommand: (deviceId: number, type: CommandType, text?: string) =>
+    request<Command>('POST', `/devices/${deviceId}/commands`, text !== undefined ? { type, text } : { type }),
+
+  settings: () => request<Settings>('GET', '/settings'),
+  updateSettings: (patch: SettingsPatch) => request<Settings>('PATCH', '/settings', patch),
+  regenerateTraccarToken: () => request<Settings>('POST', '/settings/traccar-token'),
+
+  notificationPrefs: () => request<NotificationPrefs>('GET', '/me/notifications'),
+  updateNotificationPrefs: (events: NotificationPrefs['events']) =>
+    request<NotificationPrefs>('PUT', '/me/notifications', { events }),
+  telegramLink: () => request<TelegramLink>('POST', '/me/telegram/link'),
+  telegramUnlink: () => request<void>('DELETE', '/me/telegram'),
+  testNotification: () => request<TestNotificationResult>('POST', '/me/notifications/test'),
+
+  vapidKey: () => request<{ publicKey: string }>('GET', '/push/vapid-key'),
+  pushSubscribe: (sub: PushSubscriptionJSON) => request<unknown>('POST', '/push/subscriptions', sub),
+  pushUnsubscribe: (endpoint: string) => request<void>('DELETE', '/push/subscriptions', { endpoint }),
+}
+
+/** Query keys shared between pages and the live connection (which patches/invalidates them). */
+export const qk = {
+  events: (q?: EventQuery) => (q ? (['events', q] as const) : (['events'] as const)),
+  geofences: ['geofences'] as const,
+  commands: (deviceId: number) => ['commands', deviceId] as const,
+  settings: ['settings'] as const,
+  notificationPrefs: ['notificationPrefs'] as const,
 }
 
 export function wsUrl(token: string): string {

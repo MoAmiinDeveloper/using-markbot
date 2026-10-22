@@ -1,14 +1,15 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { ArrowDown, ArrowUp, ArrowUpDown, Cpu, History, Map, Pencil, Plus, Search, SearchX, Trash2 } from 'lucide-react'
-import { api, ApiError } from '@/api/client'
+import { api, ApiError, qk } from '@/api/client'
 import { DEVICE_CATEGORIES, PROTOCOLS, type Device, type DeviceInput, type DeviceStatus } from '@/api/types'
 import { Button, IconButton } from '@/components/ui/Button'
 import { Field, Input, Select } from '@/components/ui/Input'
 import { Drawer, Modal } from '@/components/ui/Modal'
 import { EmptyState, Skeleton, StatusPill } from '@/components/ui/Misc'
 import { useDeviceList, useLive } from '@/store/live'
+import { SourceBadge } from '@/components/ui/SourceBadge'
 import { useNow } from '@/store/now'
 import { toast } from '@/store/toast'
 import { CategoryIcon, categoryMeta } from '@/lib/category'
@@ -19,19 +20,26 @@ import { cn } from '@/lib/cn'
 type SortKey = 'name' | 'status' | 'lastSeen' | 'imei' | 'category'
 const STATUS_ORDER: Record<DeviceStatus, number> = { moving: 0, idle: 1, stopped: 2, offline: 3, never: 4 }
 
-const EMPTY: DeviceInput = { name: '', imei: '', protocol: 'teltonika', plate: '', model: '', category: 'car', phone: '' }
+type FormValues = Omit<DeviceInput, 'speedLimit'> & { speedLimit: string }
 
-function validate(v: DeviceInput) {
-  const e: Partial<Record<keyof DeviceInput, string>> = {}
+const EMPTY: FormValues = { name: '', imei: '', protocol: 'teltonika', plate: '', model: '', category: 'car', phone: '', speedLimit: '' }
+
+function validate(v: FormValues, bridged: boolean) {
+  const e: Partial<Record<keyof FormValues, string>> = {}
   if (!v.name.trim()) e.name = 'Name is required'
   else if (v.name.trim().length > 64) e.name = 'Keep it under 64 characters'
-  if (!/^\d{15}$/.test(v.imei.trim())) e.imei = 'IMEI must be exactly 15 digits'
+  if (bridged) {
+    if (!v.imei.trim()) e.imei = 'Identifier is required'
+  } else if (!/^\d{15}$/.test(v.imei.trim())) e.imei = 'IMEI must be exactly 15 digits'
+  if (v.speedLimit.trim() && !/^\d{1,3}$/.test(v.speedLimit.trim())) e.speedLimit = 'Enter a whole number of km/h'
+  else if (Number(v.speedLimit) > 300) e.speedLimit = 'That’s faster than 300 km/h'
   if (v.phone && !/^\+?[\d\s-]{5,20}$/.test(v.phone.trim())) e.phone = 'Enter a valid phone number'
   return e
 }
 
 function DeviceForm({ initial, onClose }: { initial: Device | null; onClose: () => void }) {
-  const [v, setV] = useState<DeviceInput>(() =>
+  const bridged = initial?.source === 'traccar'
+  const [v, setV] = useState<FormValues>(() =>
     initial
       ? {
           name: initial.name,
@@ -41,19 +49,23 @@ function DeviceForm({ initial, onClose }: { initial: Device | null; onClose: () 
           model: initial.model,
           category: initial.category || 'other',
           phone: initial.phone,
+          speedLimit: initial.speedLimit ? String(initial.speedLimit) : '',
         }
       : EMPTY,
   )
   const [touched, setTouched] = useState(false)
   const [serverError, setServerError] = useState<string | null>(null)
-  const errors = validate(v)
-  const show = (k: keyof DeviceInput) => (touched ? errors[k] : undefined)
+  const errors = validate(v, bridged)
+  const show = (k: keyof FormValues) => (touched ? errors[k] : undefined)
   const upsert = useLive((s) => s.upsert)
+  const settings = useQuery({ queryKey: qk.settings, queryFn: api.settings, staleTime: 60_000, meta: { silent: true } })
+  const defaultLimit = settings.data?.speedLimit
 
   const m = useMutation({
-    mutationFn: (input: DeviceInput) => {
+    mutationFn: (input: FormValues) => {
       const clean: DeviceInput = {
         ...input,
+        speedLimit: input.speedLimit.trim() ? Number(input.speedLimit) : 0,
         name: input.name.trim(),
         imei: input.imei.trim(),
         plate: input.plate?.trim(),
@@ -77,7 +89,7 @@ function DeviceForm({ initial, onClose }: { initial: Device | null; onClose: () 
     if (Object.keys(errors).length) return
     m.mutate(v)
   }
-  const set = <K extends keyof DeviceInput>(k: K, val: DeviceInput[K]) => setV((s) => ({ ...s, [k]: val }))
+  const set = <K extends keyof FormValues>(k: K, val: FormValues[K]) => setV((s) => ({ ...s, [k]: val }))
 
   return (
     <Drawer
@@ -105,23 +117,31 @@ function DeviceForm({ initial, onClose }: { initial: Device | null; onClose: () 
             <Input id={id} aria-describedby={d} data-autofocus value={v.name} invalid={!!show('name')} placeholder="Truck 07" onChange={(e) => set('name', e.target.value)} />
           )}
         </Field>
-        <Field label="IMEI" required error={show('imei')} hint="15-digit identifier printed on the tracker">
-          {(id, d) => (
-            <Input
-              id={id}
-              aria-describedby={d}
-              inputMode="numeric"
-              autoComplete="off"
-              maxLength={15}
-              className="font-mono"
-              value={v.imei}
-              invalid={!!show('imei')}
-              placeholder="356307042441013"
-              onChange={(e) => set('imei', e.target.value.replace(/\D/g, ''))}
-              trailing={<span className="tabular pr-1.5 text-[11px] text-slate-400">{v.imei.length}/15</span>}
-            />
-          )}
-        </Field>
+        {bridged ? (
+          <Field label="Traccar unique ID" required error={show('imei')} hint="Matches the device’s identifier in Traccar">
+            {(id, d) => (
+              <Input id={id} aria-describedby={d} autoComplete="off" className="font-mono" value={v.imei} invalid={!!show('imei')} onChange={(e) => set('imei', e.target.value)} />
+            )}
+          </Field>
+        ) : (
+          <Field label="IMEI" required error={show('imei')} hint="15-digit identifier printed on the tracker">
+            {(id, d) => (
+              <Input
+                id={id}
+                aria-describedby={d}
+                inputMode="numeric"
+                autoComplete="off"
+                maxLength={15}
+                className="font-mono"
+                value={v.imei}
+                invalid={!!show('imei')}
+                placeholder="356307042441013"
+                onChange={(e) => set('imei', e.target.value.replace(/\D/g, ''))}
+                trailing={<span className="tabular pr-1.5 text-[11px] text-slate-400">{v.imei.length}/15</span>}
+              />
+            )}
+          </Field>
+        )}
         <div className="grid grid-cols-2 gap-3">
           <Field label="Protocol">
             {(id) => (
@@ -159,6 +179,30 @@ function DeviceForm({ initial, onClose }: { initial: Device | null; onClose: () 
             <Input id={id} aria-describedby={d} type="tel" value={v.phone} invalid={!!show('phone')} placeholder="+971 50 123 4567" onChange={(e) => set('phone', e.target.value)} />
           )}
         </Field>
+        <Field
+          label="Speed limit"
+          error={show('speedLimit')}
+          hint={`Overspeed alerts fire above this speed. Leave empty to use the fleet default${defaultLimit ? ` (${defaultLimit} km/h)` : ''}.`}
+        >
+          {(id, d) => (
+            <Input
+              id={id}
+              aria-describedby={d}
+              inputMode="numeric"
+              value={v.speedLimit}
+              invalid={!!show('speedLimit')}
+              placeholder={defaultLimit ? String(defaultLimit) : 'Default'}
+              onChange={(e) => set('speedLimit', e.target.value.replace(/\D/g, '').slice(0, 3))}
+              trailing={<span className="pr-1.5 text-[11px] text-slate-400">km/h</span>}
+            />
+          )}
+        </Field>
+        {initial && (
+          <div className="flex items-center justify-between rounded-lg border border-slate-200/80 px-3 py-2 text-[12.5px] dark:border-white/[0.06]">
+            <span className="text-slate-500 dark:text-slate-400">Connection</span>
+            <SourceBadge source={initial.source} />
+          </div>
+        )}
       </form>
     </Drawer>
   )
@@ -308,6 +352,9 @@ export default function DevicesPage() {
                       <SortHeader k="name" label="Name" sort={sort} onSort={onSort} />
                       <SortHeader k="status" label="Status" sort={sort} onSort={onSort} />
                       <SortHeader k="imei" label="IMEI" sort={sort} onSort={onSort} />
+                      <th scope="col" className="px-4 py-2.5 text-left font-medium">
+                        Source
+                      </th>
                       <SortHeader k="category" label="Type" sort={sort} onSort={onSort} className="hidden lg:table-cell" />
                       <th scope="col" className="hidden px-4 py-2.5 text-left font-medium xl:table-cell">
                         Model / SIM
@@ -336,6 +383,9 @@ export default function DevicesPage() {
                           <StatusPill status={d.status} />
                         </td>
                         <td className="tabular px-4 py-2.5 font-mono text-[12px] text-slate-600 dark:text-slate-300">{d.imei}</td>
+                        <td className="px-4 py-2.5">
+                          <SourceBadge source={d.source} />
+                        </td>
                         <td className="hidden px-4 py-2.5 text-slate-600 dark:text-slate-300 lg:table-cell">{categoryMeta(d.category).label}</td>
                         <td className="hidden px-4 py-2.5 xl:table-cell">
                           <div className="text-slate-700 dark:text-slate-200">{d.model || '—'}</div>
@@ -378,6 +428,7 @@ export default function DevicesPage() {
                         <StatusPill status={d.status} />
                       </div>
                       <div className="tabular mt-0.5 truncate font-mono text-[11.5px] text-slate-500 dark:text-slate-400">
+                        {d.source === 'traccar' && <SourceBadge source={d.source} className="mr-1.5 align-[1px] font-sans" />}
                         {d.imei}
                         {d.plate ? ` · ${d.plate}` : ''}
                       </div>

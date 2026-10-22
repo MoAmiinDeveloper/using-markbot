@@ -1,6 +1,17 @@
-import { api, wsUrl } from '@/api/client'
-import type { Device, Position, WsMessage } from '@/api/types'
+import { api, qk, wsUrl } from '@/api/client'
+import { queryClient } from '@/api/queryClient'
+import type { Command, Device, FleetEvent, NotificationPrefs, Position, WsMessage } from '@/api/types'
+import { playEventSound } from '@/lib/sound'
+import { useAlerts } from './alerts'
 import { useLive } from './live'
+import { toast } from './toast'
+
+/** Whether the user wants in-app notifications for this event type (default yes). */
+function wantsInApp(e: FleetEvent): boolean {
+  const prefs = queryClient.getQueryData<NotificationPrefs>(qk.notificationPrefs)
+  const p = prefs?.events?.[e.type as keyof NotificationPrefs['events']]
+  return p ? p.inApp : true
+}
 
 /**
  * Live connection manager: opens the WebSocket, (re)fetches /devices on every
@@ -18,6 +29,7 @@ class LiveConnection {
   private pendingPositions: Position[] = []
   private pendingDeleted: number[] = []
   private synced = false
+  private eventsInvalidateTimer: number | undefined
 
   start(token: string) {
     if (!this.stopped && this.token === token) return
@@ -45,7 +57,10 @@ class LiveConnection {
     }
     this.token = null
     this.synced = false
+    window.clearTimeout(this.eventsInvalidateTimer)
+    this.eventsInvalidateTimer = undefined
     useLive.getState().reset()
+    useAlerts.getState().reset()
   }
 
   /** Force a resync (e.g. user clicked "retry"). */
@@ -100,6 +115,7 @@ class LiveConnection {
   }
 
   private async sync() {
+    void this.syncEvents()
     try {
       const devices = await api.devices()
       if (this.stopped) return
@@ -109,6 +125,44 @@ class LiveConnection {
       if (this.stopped) return
       useLive.getState().setError(e instanceof Error ? e.message : 'Failed to load devices')
     }
+  }
+
+  /** Seed the notification centre with the latest events (endpoint may not exist on old servers). */
+  private async syncEvents() {
+    try {
+      const events = await api.events({ limit: 50 })
+      if (this.stopped) return
+      useAlerts.getState().setRecent(Array.isArray(events) ? events.filter(wantsInApp) : [])
+    } catch {
+      /* non-fatal: bell simply stays empty */
+    }
+  }
+
+  private onEvent(e: FleetEvent) {
+    // refresh any open event lists (throttled; events can arrive in bursts)
+    if (this.eventsInvalidateTimer === undefined) {
+      this.eventsInvalidateTimer = window.setTimeout(() => {
+        this.eventsInvalidateTimer = undefined
+        void queryClient.invalidateQueries({ queryKey: qk.events() })
+      }, 1500)
+    }
+    if (!wantsInApp(e)) return
+    const alerts = useAlerts.getState()
+    if (alerts.recent.some((x) => x.id === e.id)) return
+    alerts.add(e)
+    toast.event(e, useLive.getState().byId[e.deviceId]?.name)
+    if (!alerts.muted) playEventSound(e.type)
+  }
+
+  private onCommand(c: Command) {
+    queryClient.setQueryData<Command[]>(qk.commands(c.deviceId), (list) => {
+      if (!list) return list
+      const i = list.findIndex((x) => x.id === c.id)
+      if (i === -1) return [c, ...list]
+      const next = list.slice()
+      next[i] = c
+      return next
+    })
   }
 
   private onFrame(raw: unknown) {
@@ -129,6 +183,18 @@ class LiveConnection {
       case 'deleted':
         this.pendingDeleted.push(msg.data.id)
         break
+      case 'event':
+        if (msg.data) this.onEvent(msg.data)
+        return
+      case 'command':
+        if (msg.data) this.onCommand(msg.data)
+        return
+      case 'geofences':
+        void queryClient.invalidateQueries({ queryKey: qk.geofences })
+        return
+      case 'notifications':
+        void queryClient.invalidateQueries({ queryKey: qk.notificationPrefs })
+        return
       default:
         return
     }

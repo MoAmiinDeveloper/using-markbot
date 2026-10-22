@@ -15,7 +15,10 @@ function applyTheme(theme: Theme) {
 interface UiState {
   theme: Theme
   mapStyle: MapStyleId
+  /** geofence overlay on the Live Map */
+  showGeofences: boolean
   toggleTheme: () => void
+  toggleGeofences: () => void
   setMapStyle: (s: MapStyleId) => void
 }
 
@@ -27,11 +30,17 @@ const initialStyle: MapStyleId =
 export const useUi = create<UiState>((set, get) => ({
   theme: initialTheme,
   mapStyle: initialStyle,
+  showGeofences: readLS('fleet.showGeofences') !== '0',
   toggleTheme: () => {
     const theme: Theme = get().theme === 'dark' ? 'light' : 'dark'
     writeLS('fleet.theme', theme)
     applyTheme(theme)
     set({ theme })
+  },
+  toggleGeofences: () => {
+    const showGeofences = !get().showGeofences
+    writeLS('fleet.showGeofences', showGeofences ? '1' : '0')
+    set({ showGeofences })
   },
   setMapStyle: (mapStyle) => {
     writeLS('fleet.mapStyle', mapStyle)

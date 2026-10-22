@@ -9,6 +9,8 @@ const DashboardPage = lazy(() => import('./pages/Dashboard'))
 const HistoryPage = lazy(() => import('./pages/History'))
 const DevicesPage = lazy(() => import('./pages/Devices'))
 const SettingsPage = lazy(() => import('./pages/Settings'))
+const AlertsPage = lazy(() => import('./pages/Alerts'))
+const GeofencesPage = lazy(() => import('./pages/Geofences'))
 
 function PageFallback() {
   return (
@@ -47,6 +49,22 @@ export function App() {
             element={
               <Suspense fallback={<PageFallback />}>
                 <DevicesPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/alerts"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <AlertsPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/geofences"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <GeofencesPage />
               </Suspense>
             }
           />

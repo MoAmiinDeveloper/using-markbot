@@ -118,3 +118,40 @@ input[type='range'].scrubber::-webkit-slider-thumb {
 input[type='range'].scrubber::-moz-range-thumb {
   @apply h-4 w-4 rounded-full border-2 border-white bg-brand-500 shadow-md;
 }
+.geofence-label {
+  @apply pointer-events-auto flex max-w-[180px] items-center gap-1.5 whitespace-nowrap rounded-full border border-slate-200/90 bg-white/90 py-[3px] pl-1.5 pr-2.5 text-[11px] font-semibold text-slate-700 shadow-soft backdrop-blur dark:border-white/10 dark:bg-ink-900/85 dark:text-slate-200;
+}
+.geofence-label > span:first-child {
+  @apply h-2 w-2 shrink-0 rounded-full;
+}
+.geofence-label > span:last-child {
+  @apply truncate;
+}
+.geofence-label[data-selected] {
+  @apply ring-2 ring-brand-500/60;
+}
+.geo-handle {
+  @apply h-3.5 w-3.5 cursor-grab rounded-full border-2 border-white bg-brand-500 shadow-md transition-transform hover:scale-125 active:cursor-grabbing;
+}
+.geo-handle[data-kind='mid'] {
+  @apply h-2.5 w-2.5 cursor-copy border-[1.5px] bg-white/90 opacity-80 dark:bg-slate-200;
+}
+.geo-handle[data-kind='first'] {
+  @apply h-4 w-4 cursor-pointer bg-emerald-500 ring-4 ring-emerald-500/30;
+}
+.geo-handle[data-kind='radius'] {
+  @apply cursor-ew-resize bg-white;
+  border-color: rgb(59 106 248);
+}
+.event-pin {
+  @apply relative grid h-7 w-7 place-items-center;
+}
+.event-pin::before {
+  content: '';
+  @apply absolute inset-0 animate-pulse-ring rounded-full;
+  background: var(--pin);
+}
+.event-pin > span {
+  @apply relative h-4 w-4 rounded-full border-[3px] border-white shadow-lg;
+  background: var(--pin);
+}
