@@ -2,18 +2,14 @@ import { useEffect, useRef, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { Ellipsis } from 'lucide-react'
 import { cn } from '@/lib/cn'
-import { LogoMark } from './Logo'
 import { NAV } from './nav'
 
 export function NavRail() {
   return (
     <nav
       aria-label="Main"
-      className="relative z-30 hidden w-[68px] shrink-0 flex-col items-center border-r border-slate-200/80 bg-white py-3 dark:border-white/[0.06] dark:bg-ink-950 md:flex"
+      className="dark relative z-30 hidden w-[68px] shrink-0 flex-col items-center bg-navy-800 py-3 md:flex"
     >
-      <NavLink to="/live" aria-label="Home" className="mb-5 rounded-xl">
-        <LogoMark className="h-9 w-9" />
-      </NavLink>
       <ul className="flex flex-1 flex-col items-center gap-1.5">
         {NAV.map(({ to, label, icon: Icon }) => (
           <li key={to} className={cn(to === '/settings' && 'mt-auto')}>
@@ -24,15 +20,15 @@ export function NavRail() {
                 cn(
                   'group relative grid h-11 w-11 place-items-center rounded-xl transition-colors',
                   isActive
-                    ? 'bg-brand-500/10 text-navy-600 dark:bg-brand-400/[0.12] dark:text-brand-300'
-                    : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-white/[0.06] dark:hover:text-white',
+                    ? 'bg-brand-500 text-navy-900 shadow-md shadow-black/20'
+                    : 'text-white/60 hover:bg-white/[0.08] hover:text-white',
                 )
               }
             >
               {({ isActive }) => (
                 <>
                   {isActive && (
-                    <span className="absolute -left-[12px] top-2.5 h-6 w-[3px] rounded-r-full bg-brand-500 dark:bg-brand-400" />
+                    <span className="absolute -left-[12px] top-2.5 h-6 w-[3px] rounded-r-full bg-brand-500" />
                   )}
                   <Icon className="h-[19px] w-[19px]" strokeWidth={isActive ? 2.2 : 1.9} />
                   <span className="pointer-events-none absolute left-full ml-3 whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-[12px] font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 dark:bg-slate-100 dark:text-slate-900">
@@ -69,14 +65,14 @@ export function BottomNav() {
     <nav
       ref={ref}
       aria-label="Main"
-      className="relative z-30 flex shrink-0 border-t border-slate-200/80 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur dark:border-white/[0.06] dark:bg-ink-950/95 md:hidden"
+      className="relative z-30 flex shrink-0 border-t-2 border-brand-500 bg-navy-700 pb-[env(safe-area-inset-bottom)] md:hidden"
     >
       {primary.map(({ to, label, icon: Icon }) => (
         <NavLink
           key={to}
           to={to}
           className={({ isActive }) =>
-            cn(item, isActive ? 'text-navy-600 dark:text-brand-300' : 'text-slate-500 dark:text-slate-400')
+            cn(item, isActive ? 'text-brand-500' : 'text-white/60')
           }
         >
           <Icon className="h-5 w-5" />
@@ -88,7 +84,7 @@ export function BottomNav() {
         aria-expanded={more}
         aria-haspopup="menu"
         onClick={() => setMore((m) => !m)}
-        className={cn(item, inRest || more ? 'text-navy-600 dark:text-brand-300' : 'text-slate-500 dark:text-slate-400')}
+        className={cn(item, inRest || more ? 'text-brand-500' : 'text-white/60')}
       >
         <Ellipsis className="h-5 w-5" />
         More

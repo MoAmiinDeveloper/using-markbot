@@ -59,7 +59,7 @@ function BrandPanel() {
         ))}
       </svg>
 
-      <Logo className="relative text-white" />
+      <Logo size="h-14" className="relative text-white" />
 
       <div className="relative max-w-md">
         <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[12px] font-medium text-slate-300 backdrop-blur">
@@ -139,7 +139,7 @@ export function LoginPage() {
       <BrandPanel />
       <div className="relative flex flex-1 flex-col">
         <div className="flex items-center justify-between p-5 sm:p-6">
-          <Logo className="text-slate-900 dark:text-white lg:invisible" />
+          <Logo size="h-10" className="text-navy-700 dark:text-white lg:invisible" />
           <ThemeToggle />
         </div>
         <div className="flex flex-1 items-center justify-center px-5 pb-16 sm:px-6">

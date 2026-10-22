@@ -33,10 +33,10 @@ export function LogoMark({ className }: { className?: string }) {
 }
 
 /** Full lockup: gold swoosh + "somtel" wordmark (inherits text colour) + product label. */
-export function Logo({ className }: { className?: string }) {
+export function Logo({ className, size = 'h-8' }: { className?: string; size?: string }) {
   return (
     <span className={cn('inline-flex items-center gap-2.5', className)} aria-label={APP_NAME}>
-      <svg viewBox="60 115 720 333" className="h-8 w-auto" aria-hidden>
+      <svg viewBox="60 115 720 333" className={cn(size, 'w-auto')} aria-hidden>
         {MARK_PATHS.map((d, i) => (
           <path key={i} d={d} fill="#ffd700" />
         ))}

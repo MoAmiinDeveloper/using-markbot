@@ -6,7 +6,9 @@ import { useUi } from '@/store/ui'
 import { IconButton } from '@/components/ui/Button'
 import { ConnectionBadge } from './ConnectionBadge'
 import { GlobalSearch } from './GlobalSearch'
-import { LogoMark } from './Logo'
+import { Link } from 'react-router-dom'
+import { APP_NAME } from '@/config'
+import { Logo, LogoMark } from './Logo'
 import { NotificationBell } from './NotificationBell'
 
 function initials(name: string) {
@@ -96,11 +98,14 @@ export function ThemeToggle() {
 
 export function TopBar({ title }: { title: string }) {
   return (
-    <header className="relative z-20 flex h-14 shrink-0 items-center gap-3 border-b border-slate-200/80 bg-white/90 px-3 backdrop-blur dark:border-white/[0.06] dark:bg-ink-950/90 sm:px-4">
-      <LogoMark className="h-7 w-7 md:hidden" />
-      <h1 className="hidden min-w-[96px] text-[15px] font-semibold tracking-tight text-slate-900 dark:text-white lg:block">
-        {title}
-      </h1>
+    // Brand bar: always Somtel navy; the `dark` class gives children their on-navy styling.
+    <header className="dark relative z-20 flex h-14 shrink-0 items-center gap-3 border-b-2 border-brand-500 bg-navy-700 px-3 text-white sm:px-4">
+      <Link to="/live" aria-label={`${APP_NAME} home`} className="flex shrink-0 items-center rounded-lg md:w-[52px] lg:w-auto">
+        <Logo size="h-8" className="hidden text-white lg:inline-flex" />
+        <LogoMark className="h-8 w-8 lg:hidden" />
+      </Link>
+      <span className="hidden h-6 w-px bg-white/15 lg:block" aria-hidden />
+      <h1 className="hidden min-w-[96px] text-[15px] font-semibold tracking-tight text-white lg:block">{title}</h1>
       <GlobalSearch className="max-w-md flex-1" />
       <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
         <ConnectionBadge compact />

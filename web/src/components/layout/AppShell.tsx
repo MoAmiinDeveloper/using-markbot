@@ -50,14 +50,16 @@ export function AppShell() {
   const title = NAV.find((n) => loc.pathname.startsWith(n.to))?.label ?? ''
 
   return (
-    <div className="flex h-full w-full overflow-hidden">
-      <NavRail />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <TopBar title={title} />
-        <main className="relative min-h-0 flex-1 overflow-hidden">
-          <Outlet />
-        </main>
-        <BottomNav />
+    <div className="flex h-full w-full flex-col overflow-hidden">
+      <TopBar title={title} />
+      <div className="flex min-h-0 flex-1">
+        <NavRail />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <main className="relative min-h-0 flex-1 overflow-hidden">
+            <Outlet />
+          </main>
+          <BottomNav />
+        </div>
       </div>
     </div>
   )
