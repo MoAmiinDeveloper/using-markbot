@@ -101,8 +101,8 @@ export function TopBar({ title }: { title: string }) {
     // Brand bar: always Somtel navy; the `dark` class gives children their on-navy styling.
     <header className="dark relative z-20 flex h-14 shrink-0 items-center gap-3 border-b-2 border-brand-500 bg-navy-700 px-3 text-white sm:px-4">
       <Link to="/live" aria-label={`${APP_NAME} home`} className="flex shrink-0 items-center rounded-lg md:w-[52px] lg:w-auto">
-        <Logo size="h-8" className="hidden text-white lg:inline-flex" />
-        <LogoMark className="h-8 w-8 lg:hidden" />
+        <Logo size="h-11" className="hidden text-white lg:inline-flex" />
+        <LogoMark className="h-9 w-9 lg:hidden" />
       </Link>
       <span className="hidden h-6 w-px bg-white/15 lg:block" aria-hidden />
       <h1 className="hidden min-w-[96px] text-[15px] font-semibold tracking-tight text-white lg:block">{title}</h1>
