@@ -170,7 +170,7 @@ export default function DashboardPage() {
   )
 
   const kpis: Array<{ key: keyof Summary; label: string; icon: ReactNode; color: string }> = [
-    { key: 'total', label: 'Total vehicles', icon: <Truck />, color: '#5c8dfd' },
+    { key: 'total', label: 'Total vehicles', icon: <Truck />, color: '#e6c200' },
     { key: 'moving', label: 'Moving', icon: <Activity />, color: STATUS_META.moving.color },
     { key: 'idle', label: 'Idle', icon: <CirclePause />, color: STATUS_META.idle.color },
     { key: 'stopped', label: 'Stopped', icon: <CircleParking />, color: STATUS_META.stopped.color },
@@ -212,7 +212,7 @@ export default function DashboardPage() {
             title="Live map"
             className="lg:col-span-2"
             action={
-              <Link to="/live" className="inline-flex items-center gap-1 text-[12.5px] font-medium text-brand-600 hover:text-brand-500 dark:text-brand-300">
+              <Link to="/live" className="inline-flex items-center gap-1 text-[12.5px] font-medium text-navy-600 hover:text-navy-500 dark:text-brand-300">
                 Open map <ArrowRight className="h-3.5 w-3.5" />
               </Link>
             }

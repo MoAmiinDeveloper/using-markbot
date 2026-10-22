@@ -94,7 +94,7 @@ function clusterElement(props: Record<string, number>, count: number): HTMLEleme
   el.style.background = `conic-gradient(${stops.join(',') || '#64748b 0 360deg'})`
   el.style.setProperty('--tw-ring-color', 'rgb(15 23 42 / 0.18)')
   const inner = document.createElement('div')
-  inner.style.cssText = `width:${size - 10}px;height:${size - 10}px;border-radius:999px;display:grid;place-items:center;background:#0f172a;font-size:${count < 100 ? 12.5 : 11.5}px`
+  inner.style.cssText = `width:${size - 10}px;height:${size - 10}px;border-radius:999px;display:grid;place-items:center;background:#141b37;font-size:${count < 100 ? 12.5 : 11.5}px`
   inner.textContent = String(count)
   el.appendChild(inner)
   el.setAttribute('role', 'button')

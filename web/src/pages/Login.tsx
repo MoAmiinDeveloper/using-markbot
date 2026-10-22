@@ -11,7 +11,7 @@ import { ThemeToggle } from '@/components/layout/TopBar'
 
 function BrandPanel() {
   return (
-    <div className="relative hidden overflow-hidden bg-ink-950 lg:flex lg:w-[52%] lg:flex-col lg:justify-between lg:p-12">
+    <div className="relative hidden overflow-hidden bg-navy-900 lg:flex lg:w-[52%] lg:flex-col lg:justify-between lg:p-12">
       {/* backdrop: grid + glow + stylised routes */}
       <div
         className="absolute inset-0 opacity-[0.35]"
@@ -22,8 +22,8 @@ function BrandPanel() {
           maskImage: 'radial-gradient(ellipse at 40% 45%, black 30%, transparent 75%)',
         }}
       />
-      <div className="absolute -left-24 top-1/4 h-[420px] w-[420px] rounded-full bg-brand-600/30 blur-[120px]" />
-      <div className="absolute bottom-0 right-0 h-[360px] w-[360px] rounded-full bg-emerald-500/20 blur-[120px]" />
+      <div className="absolute -left-24 top-1/4 h-[420px] w-[420px] rounded-full bg-brand-500/20 blur-[120px]" />
+      <div className="absolute bottom-0 right-0 h-[360px] w-[360px] rounded-full bg-navy-500/40 blur-[120px]" />
       <svg
         className="absolute inset-0 h-full w-full"
         viewBox="0 0 600 700"
@@ -33,9 +33,9 @@ function BrandPanel() {
       >
         <defs>
           <linearGradient id="r1" x1="0" x2="1">
-            <stop offset="0" stopColor="#5c8dfd" stopOpacity="0" />
-            <stop offset="0.5" stopColor="#5c8dfd" />
-            <stop offset="1" stopColor="#10b981" />
+            <stop offset="0" stopColor="#ffd700" stopOpacity="0" />
+            <stop offset="0.5" stopColor="#ffd700" />
+            <stop offset="1" stopColor="#fff5bf" />
           </linearGradient>
         </defs>
         <path d="M-20 520 C 120 470, 160 330, 290 340 S 470 230, 620 170" fill="none" stroke="url(#r1)" strokeWidth="3" strokeLinecap="round" />
@@ -67,7 +67,7 @@ function BrandPanel() {
         </p>
         <h2 className="text-[34px] font-semibold leading-[1.15] tracking-tight text-white">
           Every vehicle, every second,
-          <span className="bg-gradient-to-r from-brand-300 to-emerald-300 bg-clip-text text-transparent"> one map.</span>
+          <span className="bg-gradient-to-r from-brand-300 to-brand-500 bg-clip-text text-transparent"> one map.</span>
         </h2>
         <p className="mt-4 text-[15px] leading-relaxed text-slate-400">
           Live positions, trip history and fleet health from your Teltonika trackers — streamed straight to your browser.

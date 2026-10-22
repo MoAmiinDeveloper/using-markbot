@@ -79,7 +79,7 @@ export function Toaster() {
             <Icon
               className={cn(
                 'mt-0.5 h-[18px] w-[18px] shrink-0',
-                t.kind === 'error' ? 'text-rose-500' : t.kind === 'success' ? 'text-emerald-500' : 'text-brand-500',
+                t.kind === 'error' ? 'text-rose-500' : t.kind === 'success' ? 'text-emerald-500' : 'text-navy-600',
               )}
             />
             <div className="min-w-0 flex-1">

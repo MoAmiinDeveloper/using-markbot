@@ -64,7 +64,7 @@ export function VehiclePicker({
                     <span
                       className={cn(
                         'grid h-4 w-4 shrink-0 place-items-center rounded border transition-colors',
-                        on ? 'border-brand-600 bg-brand-600 text-white' : 'border-slate-300 dark:border-white/20',
+                        on ? 'border-brand-500 bg-brand-500 text-navy-900' : 'border-slate-300 dark:border-white/20',
                       )}
                     >
                       {on && <Check className="h-3 w-3" strokeWidth={3} />}

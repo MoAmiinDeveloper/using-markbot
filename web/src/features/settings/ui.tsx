@@ -111,7 +111,7 @@ export function Steps({ children }: { children: ReactNode[] }) {
     <ol className="space-y-2.5">
       {children.map((c, i) => (
         <li key={i} className="flex gap-3 text-[12.5px] leading-relaxed text-slate-600 dark:text-slate-300">
-          <span className="tabular grid h-5 w-5 shrink-0 place-items-center rounded-full bg-brand-500/12 text-[11px] font-semibold text-brand-700 dark:text-brand-300">
+          <span className="tabular grid h-5 w-5 shrink-0 place-items-center rounded-full bg-brand-500/12 text-[11px] font-semibold text-navy-700 dark:text-brand-300">
             {i + 1}
           </span>
           <span className="min-w-0 flex-1 pt-px">{c}</span>

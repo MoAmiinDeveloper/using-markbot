@@ -127,7 +127,7 @@ export function Playback({ track, seek }: { track: Track; seek: { v: number; n: 
           setPlaying((p) => !p || atEnd)
         }}
         aria-label={playing ? 'Pause' : atEnd ? 'Replay' : 'Play'}
-        className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand-600 text-white shadow-md shadow-brand-900/30 transition-colors hover:bg-brand-500"
+        className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand-500 text-navy-900 shadow-md shadow-brand-900/30 transition-colors hover:bg-brand-400"
       >
         {playing ? <Pause className="h-4 w-4" fill="currentColor" /> : atEnd ? <RotateCcw className="h-4 w-4" /> : <Play className="ml-0.5 h-4 w-4" fill="currentColor" />}
       </button>

@@ -74,9 +74,9 @@ export const EVENT_META: Record<EventType, EventMeta> = {
     short: 'Command',
     description: 'A device answered a command',
     icon: Terminal,
-    color: '#3b6af8',
-    chip: 'bg-brand-500/12 text-brand-600 dark:text-brand-300',
-    pill: 'bg-brand-500/12 text-brand-700 ring-brand-500/25 dark:text-brand-300',
+    color: '#e6c200',
+    chip: 'bg-brand-500/12 text-navy-600 dark:text-brand-300',
+    pill: 'bg-brand-500/12 text-navy-700 ring-brand-500/25 dark:text-brand-300',
   },
 }
 
@@ -125,7 +125,7 @@ export const COMMAND_LABEL: Record<CommandType, string> = {
 
 export const COMMAND_STATUS_META: Record<CommandStatus, { label: string; pill: string; dot: string }> = {
   queued: { label: 'Queued', pill: 'bg-amber-500/12 text-amber-700 ring-amber-500/25 dark:text-amber-300', dot: 'bg-amber-500' },
-  sent: { label: 'Sent', pill: 'bg-brand-500/12 text-brand-700 ring-brand-500/25 dark:text-brand-300', dot: 'bg-brand-500' },
+  sent: { label: 'Sent', pill: 'bg-brand-500/12 text-navy-700 ring-brand-500/25 dark:text-brand-300', dot: 'bg-brand-500' },
   success: { label: 'Success', pill: 'bg-emerald-500/12 text-emerald-700 ring-emerald-500/25 dark:text-emerald-300', dot: 'bg-emerald-500' },
   failed: { label: 'Failed', pill: 'bg-rose-500/12 text-rose-700 ring-rose-500/25 dark:text-rose-300', dot: 'bg-rose-500' },
   expired: { label: 'Expired', pill: 'bg-slate-500/12 text-slate-600 ring-slate-500/25 dark:text-slate-400', dot: 'bg-slate-400' },

@@ -46,7 +46,7 @@ export function UserMenu() {
         aria-expanded={open}
         aria-label="Account menu"
         onClick={() => setOpen((o) => !o)}
-        className="grid h-8 w-8 place-items-center rounded-full bg-gradient-to-br from-brand-400 to-emerald-400 text-[12px] font-semibold text-white shadow-soft ring-2 ring-white dark:ring-ink-900"
+        className="grid h-8 w-8 place-items-center rounded-full bg-gradient-to-br from-brand-300 to-brand-500 text-[12px] font-semibold text-navy-900 shadow-soft ring-2 ring-white dark:ring-ink-900"
       >
         {initials(name)}
       </button>
@@ -56,7 +56,7 @@ export function UserMenu() {
             <p className="truncate font-medium text-slate-900 dark:text-white">{name}</p>
             <p className="truncate text-[12px] text-slate-500 dark:text-slate-400">{user?.email}</p>
             {user?.role && (
-              <span className="mt-1.5 inline-block rounded-md bg-brand-500/10 px-1.5 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide text-brand-600 dark:text-brand-300">
+              <span className="mt-1.5 inline-block rounded-md bg-brand-500/10 px-1.5 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide text-navy-600 dark:text-brand-300">
                 {user.role}
               </span>
             )}

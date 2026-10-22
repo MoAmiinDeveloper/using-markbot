@@ -333,7 +333,7 @@ export function CommandsSection({ device }: { device: Device }) {
                 <button
                   type="button"
                   onClick={() => setShowAll((s) => !s)}
-                  className="w-full border-t border-slate-200/70 py-2 text-[12px] font-medium text-brand-600 hover:bg-slate-900/[0.03] dark:border-white/[0.05] dark:text-brand-300 dark:hover:bg-white/[0.03]"
+                  className="w-full border-t border-slate-200/70 py-2 text-[12px] font-medium text-navy-600 hover:bg-slate-900/[0.03] dark:border-white/[0.05] dark:text-brand-300 dark:hover:bg-white/[0.03]"
                 >
                   {showAll ? 'Show less' : `Show all ${list.length}`}
                 </button>

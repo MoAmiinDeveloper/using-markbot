@@ -7,7 +7,7 @@ type Size = 'sm' | 'md' | 'lg'
 
 const variants: Record<Variant, string> = {
   primary:
-    'bg-brand-600 text-white shadow-sm shadow-brand-900/20 hover:bg-brand-500 active:bg-brand-700 disabled:bg-brand-600/50',
+    'bg-brand-500 font-semibold text-navy-900 shadow-sm shadow-brand-900/20 hover:bg-brand-400 active:bg-brand-600 disabled:bg-brand-500/50',
   secondary:
     'border border-slate-200 bg-white text-slate-700 shadow-soft hover:bg-slate-50 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-200 dark:hover:bg-white/[0.08]',
   ghost: 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/[0.06] dark:hover:text-white',
@@ -70,7 +70,7 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(functio
       className={cn(
         'inline-grid shrink-0 place-items-center rounded-lg text-slate-500 transition-colors duration-150 hover:bg-slate-100 hover:text-slate-900 disabled:opacity-40 dark:text-slate-400 dark:hover:bg-white/[0.07] dark:hover:text-white',
         size === 'sm' ? 'h-7 w-7' : 'h-9 w-9',
-        active && 'bg-brand-500/10 text-brand-600 hover:bg-brand-500/15 hover:text-brand-600 dark:bg-brand-400/15 dark:text-brand-300 dark:hover:text-brand-200',
+        active && 'bg-brand-500/10 text-navy-600 hover:bg-brand-500/15 hover:text-navy-500 dark:bg-brand-400/15 dark:text-brand-300 dark:hover:text-brand-200',
         className,
       )}
       {...rest}

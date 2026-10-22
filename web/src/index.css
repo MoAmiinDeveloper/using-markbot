@@ -7,11 +7,11 @@
 @layer base {
   :root {
     color-scheme: light;
-    --app-bg: #f6f7fb;
+    --app-bg: #f5f6fa;
   }
   .dark {
     color-scheme: dark;
-    --app-bg: #07090e;
+    --app-bg: #070a17;
   }
   html,
   body,

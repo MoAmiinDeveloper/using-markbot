@@ -2,7 +2,7 @@ import type { Geofence } from '@/api/types'
 import { circleRing, fmtArea, ringArea, ringCentroid } from '@/lib/geo'
 import { fmtDistance } from '@/lib/format'
 
-export const GEOFENCE_COLORS = ['#3b6af8', '#10b981', '#f59e0b', '#f43f5e', '#8b5cf6', '#06b6d4', '#ec4899', '#64748b']
+export const GEOFENCE_COLORS = ['#ffd700', '#3b6af8', '#10b981', '#f59e0b', '#f43f5e', '#8b5cf6', '#06b6d4', '#ec4899', '#64748b']
 
 /** A geofence's closed outer ring as [lng, lat][] (circles are approximated). */
 export function geofenceRing(g: Pick<Geofence, 'type' | 'center' | 'radius' | 'polygon'>): Array<[number, number]> | null {

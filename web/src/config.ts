@@ -1,5 +1,5 @@
 /** Product branding — rename the app here. */
-export const APP_NAME = 'FleetOS'
+export const APP_NAME = 'Somtel Fleet'
 export const APP_TAGLINE = 'Real-time fleet intelligence'
 
 export const API_BASE = '/api/v1'

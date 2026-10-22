@@ -28,7 +28,7 @@ function AccountSection() {
     <SettingsCard id="account" icon={<UserRound />} title="Account" description="Your profile and preferences on this device.">
       <div className="divide-y divide-slate-100 dark:divide-white/[0.05]">
         <div className="flex flex-wrap items-center gap-3 pb-4">
-          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-gradient-to-br from-brand-400 to-emerald-400 text-[14px] font-semibold text-white">
+          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-gradient-to-br from-brand-300 to-brand-500 text-[14px] font-semibold text-navy-900">
             {initials}
           </span>
           <div className="min-w-0 flex-1">
@@ -36,7 +36,7 @@ function AccountSection() {
             <p className="truncate text-[12.5px] text-slate-500 dark:text-slate-400">{user?.email}</p>
           </div>
           {user?.role && (
-            <span className="rounded-md bg-brand-500/10 px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide text-brand-600 dark:text-brand-300">
+            <span className="rounded-md bg-brand-500/10 px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide text-navy-600 dark:text-brand-300">
               {user.role}
             </span>
           )}
@@ -134,7 +134,7 @@ export default function SettingsPage() {
                     className={cn(
                       'flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] font-medium transition-colors',
                       active === id
-                        ? 'bg-brand-500/10 text-brand-700 dark:bg-brand-400/[0.12] dark:text-brand-200'
+                        ? 'bg-brand-500/10 text-navy-700 dark:bg-brand-400/[0.12] dark:text-brand-200'
                         : 'text-slate-600 hover:bg-slate-900/[0.04] hover:text-slate-900 dark:text-slate-400 dark:hover:bg-white/[0.05] dark:hover:text-white',
                     )}
                   >

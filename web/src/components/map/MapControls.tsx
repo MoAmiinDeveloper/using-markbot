@@ -35,7 +35,7 @@ export function ControlButton({
       onClick={onClick}
       className={cn(
         'grid h-9 w-9 place-items-center text-slate-600 transition-colors hover:bg-slate-900/5 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-white [&+&]:border-t [&+&]:border-slate-200/80 dark:[&+&]:border-white/[0.07]',
-        active && '!text-brand-600 dark:!text-brand-300',
+        active && '!text-navy-600 dark:!text-brand-300',
       )}
     >
       {children}
@@ -76,7 +76,7 @@ export function MapControls({ children, className }: { children?: ReactNode; cla
               >
                 <span className="h-5 w-5 rounded-md ring-1 ring-black/10 dark:ring-white/15" style={{ background: s.swatch }} />
                 <span className="flex-1">{s.label}</span>
-                {mapStyle === s.id && <Check className="h-3.5 w-3.5 text-brand-500" />}
+                {mapStyle === s.id && <Check className="h-3.5 w-3.5 text-navy-600" />}
               </button>
             ))}
           </div>

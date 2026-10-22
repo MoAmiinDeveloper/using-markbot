@@ -8,7 +8,7 @@ function applyTheme(theme: Theme) {
   const root = document.documentElement
   root.classList.add('theme-transition')
   root.classList.toggle('dark', theme === 'dark')
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#0b0e15' : '#f8fafc')
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#0b1022' : '#f8fafc')
   window.setTimeout(() => root.classList.remove('theme-transition'), 250)
 }
 

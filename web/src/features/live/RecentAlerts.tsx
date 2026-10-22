@@ -29,7 +29,7 @@ export function RecentAlerts({ deviceId }: { deviceId: number }) {
         <button
           type="button"
           onClick={() => nav(`/alerts?device=${deviceId}`)}
-          className="inline-flex items-center gap-1 rounded text-[11.5px] font-medium text-brand-600 hover:text-brand-500 dark:text-brand-300"
+          className="inline-flex items-center gap-1 rounded text-[11.5px] font-medium text-navy-600 hover:text-navy-500 dark:text-brand-300"
         >
           View all <ArrowRight className="h-3 w-3" />
         </button>

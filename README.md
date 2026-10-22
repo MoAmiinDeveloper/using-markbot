@@ -1,4 +1,4 @@
-# FleetOS — GPS fleet tracking & management
+# Somtel Fleet — GPS fleet tracking & management
 
 A fast, modern fleet tracking platform (Trakzee-style). Teltonika devices first; new tracker
 vendors plug in through a single `protocol.Protocol` interface.

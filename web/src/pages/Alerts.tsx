@@ -185,7 +185,7 @@ function EventRow({
           {deviceName && !e.message.includes(deviceName) && <span className="truncate">· {deviceName}</span>}
         </span>
       </span>
-      <ChevronRight className={cn('h-4 w-4 shrink-0 text-slate-300 transition-transform dark:text-slate-600', selected && 'rotate-90 lg:rotate-0 text-brand-500')} />
+      <ChevronRight className={cn('h-4 w-4 shrink-0 text-slate-300 transition-transform dark:text-slate-600', selected && 'rotate-90 lg:rotate-0 text-navy-600')} />
     </button>
   )
 }

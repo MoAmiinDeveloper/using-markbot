@@ -129,7 +129,7 @@ export function NotificationBell() {
               markAllRead()
               nav('/alerts')
             }}
-            className="flex items-center justify-center gap-1.5 border-t border-slate-200/80 py-2.5 text-[12.5px] font-medium text-brand-600 hover:bg-slate-900/[0.03] dark:border-white/[0.07] dark:text-brand-300 dark:hover:bg-white/[0.04]"
+            className="flex items-center justify-center gap-1.5 border-t border-slate-200/80 py-2.5 text-[12.5px] font-medium text-navy-600 hover:bg-slate-900/[0.03] dark:border-white/[0.07] dark:text-brand-300 dark:hover:bg-white/[0.04]"
           >
             View all alerts <ArrowRight className="h-3.5 w-3.5" />
           </button>

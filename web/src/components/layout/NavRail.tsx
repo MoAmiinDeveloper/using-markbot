@@ -24,7 +24,7 @@ export function NavRail() {
                 cn(
                   'group relative grid h-11 w-11 place-items-center rounded-xl transition-colors',
                   isActive
-                    ? 'bg-brand-500/10 text-brand-600 dark:bg-brand-400/[0.12] dark:text-brand-300'
+                    ? 'bg-brand-500/10 text-navy-600 dark:bg-brand-400/[0.12] dark:text-brand-300'
                     : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-white/[0.06] dark:hover:text-white',
                 )
               }
@@ -76,7 +76,7 @@ export function BottomNav() {
           key={to}
           to={to}
           className={({ isActive }) =>
-            cn(item, isActive ? 'text-brand-600 dark:text-brand-300' : 'text-slate-500 dark:text-slate-400')
+            cn(item, isActive ? 'text-navy-600 dark:text-brand-300' : 'text-slate-500 dark:text-slate-400')
           }
         >
           <Icon className="h-5 w-5" />
@@ -88,7 +88,7 @@ export function BottomNav() {
         aria-expanded={more}
         aria-haspopup="menu"
         onClick={() => setMore((m) => !m)}
-        className={cn(item, inRest || more ? 'text-brand-600 dark:text-brand-300' : 'text-slate-500 dark:text-slate-400')}
+        className={cn(item, inRest || more ? 'text-navy-600 dark:text-brand-300' : 'text-slate-500 dark:text-slate-400')}
       >
         <Ellipsis className="h-5 w-5" />
         More
@@ -104,7 +104,7 @@ export function BottomNav() {
                 cn(
                   'flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13.5px] font-medium',
                   isActive
-                    ? 'bg-brand-500/10 text-brand-600 dark:text-brand-300'
+                    ? 'bg-brand-500/10 text-navy-600 dark:text-brand-300'
                     : 'text-slate-700 hover:bg-slate-900/5 dark:text-slate-200 dark:hover:bg-white/[0.07]',
                 )
               }

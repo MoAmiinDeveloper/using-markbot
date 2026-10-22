@@ -29,7 +29,7 @@ export function Switch({
       className={cn(
         'relative inline-flex shrink-0 items-center rounded-full transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-40',
         sm ? 'h-[18px] w-8' : 'h-5 w-9',
-        checked ? 'bg-brand-600 dark:bg-brand-500' : 'bg-slate-300 dark:bg-white/15',
+        checked ? 'bg-navy-600 dark:bg-brand-500' : 'bg-slate-300 dark:bg-white/15',
         className,
       )}
     >

@@ -128,7 +128,7 @@ export function TelegramBotSection({ settings }: { settings: Settings }) {
                     href={`https://t.me/${settings.telegramBotUsername}`}
                     target="_blank"
                     rel="noreferrer"
-                    className="text-[12px] font-medium text-brand-600 hover:underline dark:text-brand-300"
+                    className="text-[12px] font-medium text-navy-600 hover:underline dark:text-brand-300"
                   >
                     @{settings.telegramBotUsername}
                   </a>
@@ -207,7 +207,7 @@ export function TelegramBotSection({ settings }: { settings: Settings }) {
             {[
               <>
                 In Telegram, open{' '}
-                <a href="https://t.me/BotFather" target="_blank" rel="noreferrer" className="font-medium text-brand-600 hover:underline dark:text-brand-300">
+                <a href="https://t.me/BotFather" target="_blank" rel="noreferrer" className="font-medium text-navy-600 hover:underline dark:text-brand-300">
                   @BotFather
                 </a>{' '}
                 and send <Code>/newbot</Code>.

@@ -158,7 +158,7 @@ function DrawBanner({
       role="status"
       className="glass pointer-events-auto absolute inset-x-2 top-2 z-20 flex animate-slide-up items-center gap-2 rounded-2xl py-1.5 pl-3 pr-1.5 md:inset-x-auto md:left-1/2 md:top-3 md:-translate-x-1/2"
     >
-      <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-brand-500/12 text-brand-600 dark:text-brand-300">
+      <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-brand-500/12 text-navy-600 dark:text-brand-300">
         <MousePointerClick className="h-4 w-4" />
       </span>
       <span className="min-w-0 flex-1 text-[12.5px] font-medium text-slate-800 dark:text-slate-100 md:whitespace-nowrap">{text}</span>
@@ -607,7 +607,7 @@ function NewItem({ icon, title, text, onClick }: { icon: ReactNode; title: strin
       onClick={onClick}
       className="flex w-full items-start gap-3 rounded-lg px-2.5 py-2 text-left hover:bg-slate-900/5 dark:hover:bg-white/[0.07]"
     >
-      <span className="mt-0.5 text-brand-600 dark:text-brand-300">{icon}</span>
+      <span className="mt-0.5 text-navy-600 dark:text-brand-300">{icon}</span>
       <span>
         <span className="block font-medium text-slate-900 dark:text-white">{title}</span>
         <span className="block text-[11.5px] text-slate-500 dark:text-slate-400">{text}</span>
@@ -625,7 +625,7 @@ function ShapeSummary({ editor, onDraft, error }: { editor: Editor; onDraft: (d:
   if (!complete) {
     return (
       <div className={cn('flex gap-3 rounded-xl border border-dashed px-3 py-3', error ? 'border-rose-400' : 'border-brand-500/40 bg-brand-500/[0.04]')}>
-        <MousePointerClick className="mt-0.5 h-4 w-4 shrink-0 text-brand-500" />
+        <MousePointerClick className="mt-0.5 h-4 w-4 shrink-0 text-navy-600" />
         <div className="text-[12.5px] text-slate-600 dark:text-slate-300">
           <p className="font-medium text-slate-900 dark:text-white">Draw the shape on the map</p>
           <p className="mt-0.5">
