@@ -1,0 +1,120 @@
+@import 'maplibre-gl/dist/maplibre-gl.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+    --app-bg: #f6f7fb;
+  }
+  .dark {
+    color-scheme: dark;
+    --app-bg: #07090e;
+  }
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    @apply bg-[var(--app-bg)] font-sans text-[13.5px] text-slate-800 antialiased dark:text-slate-200;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11', 'tnum' 0;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .theme-transition,
+  .theme-transition * {
+    transition:
+      background-color 200ms ease,
+      border-color 200ms ease,
+      color 120ms ease !important;
+  }
+  :focus-visible {
+    @apply outline-none ring-2 ring-brand-500/70 ring-offset-0;
+  }
+  ::selection {
+    @apply bg-brand-500/30;
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(148 163 184 / 0.35) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: rgb(148 163 184 / 0.3);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+}
+
+@layer components {
+  .glass {
+    @apply border border-slate-200/80 bg-white/85 shadow-panel backdrop-blur-xl backdrop-saturate-150 dark:border-white/[0.07] dark:bg-ink-900/80;
+  }
+  .card {
+    @apply rounded-2xl border border-slate-200/80 bg-white shadow-soft dark:border-white/[0.06] dark:bg-ink-900;
+  }
+  .label-xs {
+    @apply text-[11px] font-medium uppercase tracking-[0.06em] text-slate-500 dark:text-slate-400;
+  }
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+  .skeleton {
+    @apply relative overflow-hidden rounded-md bg-slate-200/70 dark:bg-white/[0.06];
+  }
+  .skeleton::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.35), transparent);
+    animation: shimmer 1.4s infinite;
+  }
+  .dark .skeleton::after {
+    background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.05), transparent);
+  }
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* MapLibre polish */
+.maplibregl-map {
+  font: inherit;
+}
+.maplibregl-ctrl-attrib {
+  @apply !bg-white/70 text-[10px] dark:!bg-black/50 dark:text-slate-400;
+}
+.dark .maplibregl-ctrl-attrib a {
+  @apply text-slate-400;
+}
+.maplibregl-popup-content {
+  @apply rounded-xl border border-slate-200 bg-white px-3 py-2 text-slate-800 shadow-panel dark:border-white/10 dark:bg-ink-850 dark:text-slate-100;
+}
+.maplibregl-popup-anchor-bottom .maplibregl-popup-tip {
+  @apply dark:!border-t-ink-850;
+}
+.maplibregl-popup-anchor-top .maplibregl-popup-tip {
+  @apply dark:!border-b-ink-850;
+}
+.fleet-cluster {
+  @apply grid cursor-pointer place-items-center rounded-full font-semibold text-white shadow-lg ring-4 transition-transform hover:scale-110;
+}
+input[type='range'].scrubber {
+  @apply h-1.5 w-full cursor-pointer appearance-none rounded-full bg-transparent;
+}
+input[type='range'].scrubber::-webkit-slider-thumb {
+  @apply h-4 w-4 appearance-none rounded-full border-2 border-white bg-brand-500 shadow-md;
+}
+input[type='range'].scrubber::-moz-range-thumb {
+  @apply h-4 w-4 rounded-full border-2 border-white bg-brand-500 shadow-md;
+}
