@@ -25,29 +25,83 @@ func deviceID(r *http.Request) (int64, error) {
 	return id, nil
 }
 
-func (s *Server) handleListDevices(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, s.store.Devices())
+func (s *Server) handleListDevices(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, s.store.DevicesScoped(s.deviceScope(r)))
 }
 
 func (s *Server) handleGetDevice(w http.ResponseWriter, r *http.Request) {
-	id, err := deviceID(r)
-	if err == nil {
-		var d store.Device
-		if d, err = s.store.Device(id); err == nil {
-			writeJSON(w, http.StatusOK, d)
-			return
+	id, ok := s.visibleDevice(w, r)
+	if !ok {
+		return
+	}
+	d, err := s.store.Device(id)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, d)
+}
+
+// deviceExtras are the Phase 3 device fields accepted by POST/PATCH
+// /devices besides store.DeviceInput.
+type deviceExtras struct {
+	GroupIDs    *[]int64   `json:"groupIds"`    // admin only
+	Odometer    *float64   `json:"odometer"`    // km, calibrates the displayed odometer
+	EngineHours *float64   `json:"engineHours"` // h, calibrates the displayed engine hours
+	DriverID    optionalID `json:"driverId"`    // manual driver assignment; null unassigns
+}
+
+func (x *deviceExtras) validate(r *http.Request) error {
+	if x.GroupIDs != nil && !isAdmin(r) {
+		return errForbidden("only admins can change device groups")
+	}
+	if v := x.Odometer; v != nil && !(*v >= 0 && *v <= 1e8) {
+		return &store.ValidationError{Msg: "odometer must be between 0 and 100000000 km"}
+	}
+	if v := x.EngineHours; v != nil && !(*v >= 0 && *v <= 1e7) {
+		return &store.ValidationError{Msg: "engineHours must be between 0 and 10000000 h"}
+	}
+	return nil
+}
+
+// apply stores the extras for device id and returns the updated device.
+func (s *Server) applyDeviceExtras(r *http.Request, id int64, x *deviceExtras) (store.Device, error) {
+	ctx := r.Context()
+	if x.GroupIDs != nil {
+		if err := s.store.SetDeviceGroups(ctx, id, *x.GroupIDs); err != nil {
+			return store.Device{}, err
 		}
 	}
-	s.fail(w, r, err)
+	if x.DriverID.Set {
+		if x.DriverID.ID != nil {
+			if err := s.checkDriverRef(r, x.DriverID.ID); err != nil {
+				return store.Device{}, err
+			}
+		}
+		if err := s.store.AssignDriver(ctx, id, x.DriverID.ID); err != nil {
+			return store.Device{}, err
+		}
+	}
+	return s.store.SetDeviceCounters(ctx, id, x.Odometer, x.EngineHours)
 }
 
 func (s *Server) handleCreateDevice(w http.ResponseWriter, r *http.Request) {
-	var in store.DeviceInput
+	var in struct {
+		store.DeviceInput
+		deviceExtras
+	}
 	if err := decodeJSON(w, r, &in); err != nil {
 		s.fail(w, r, err)
 		return
 	}
-	d, err := s.store.CreateDevice(r.Context(), in)
+	if err := in.deviceExtras.validate(r); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	d, err := s.store.CreateDevice(r.Context(), in.DeviceInput)
+	if err == nil {
+		d, err = s.applyDeviceExtras(r, d.ID, &in.deviceExtras)
+	}
 	if err != nil {
 		s.fail(w, r, err)
 		return
@@ -56,17 +110,26 @@ func (s *Server) handleCreateDevice(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleUpdateDevice(w http.ResponseWriter, r *http.Request) {
-	id, err := deviceID(r)
-	if err != nil {
-		s.fail(w, r, err)
+	id, ok := s.visibleDevice(w, r)
+	if !ok {
 		return
 	}
-	var p store.DevicePatch
+	var p struct {
+		store.DevicePatch
+		deviceExtras
+	}
 	if err := decodeJSON(w, r, &p); err != nil {
 		s.fail(w, r, err)
 		return
 	}
-	d, err := s.store.UpdateDevice(r.Context(), id, p)
+	if err := p.deviceExtras.validate(r); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	d, err := s.store.UpdateDevice(r.Context(), id, p.DevicePatch)
+	if err == nil {
+		d, err = s.applyDeviceExtras(r, d.ID, &p.deviceExtras)
+	}
 	if err != nil {
 		s.fail(w, r, err)
 		return
@@ -75,11 +138,11 @@ func (s *Server) handleUpdateDevice(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDeleteDevice(w http.ResponseWriter, r *http.Request) {
-	id, err := deviceID(r)
-	if err == nil {
-		err = s.store.DeleteDevice(r.Context(), id)
+	id, ok := s.visibleDevice(w, r)
+	if !ok {
+		return
 	}
-	if err != nil {
+	if err := s.store.DeleteDevice(r.Context(), id); err != nil {
 		s.fail(w, r, err)
 		return
 	}
@@ -108,9 +171,8 @@ func timeRange(r *http.Request) (from, to time.Time, err error) {
 }
 
 func (s *Server) handlePositions(w http.ResponseWriter, r *http.Request) {
-	id, err := deviceID(r)
-	if err != nil {
-		s.fail(w, r, err)
+	id, ok := s.visibleDevice(w, r)
+	if !ok {
 		return
 	}
 	from, to, err := timeRange(r)
@@ -135,9 +197,8 @@ func (s *Server) handlePositions(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleTrips(w http.ResponseWriter, r *http.Request) {
-	id, err := deviceID(r)
-	if err != nil {
-		s.fail(w, r, err)
+	id, ok := s.visibleDevice(w, r)
+	if !ok {
 		return
 	}
 	from, to, err := timeRange(r)

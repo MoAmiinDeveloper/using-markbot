@@ -49,16 +49,22 @@ func newEnv(t *testing.T, webDir string) *env {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = admin.Exec(ctx, `DROP SCHEMA IF EXISTS api_test CASCADE; CREATE SCHEMA api_test`)
-	admin.Close()
+	// Per-process schema: concurrent `go test` runs must not share it.
+	schema := "api_test_" + strconv.Itoa(os.Getpid())
+	_, err = admin.Exec(ctx, `DROP SCHEMA IF EXISTS `+schema+` CASCADE; CREATE SCHEMA `+schema)
 	if err != nil {
+		admin.Close()
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		_, _ = admin.Exec(context.Background(), `DROP SCHEMA IF EXISTS `+schema+` CASCADE`)
+		admin.Close()
+	})
 	cfg, err := pgxpool.ParseConfig(url)
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg.ConnConfig.RuntimeParams["search_path"] = "api_test"
+	cfg.ConnConfig.RuntimeParams["search_path"] = schema
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -213,7 +219,7 @@ func TestDevicesCRUD(t *testing.T) {
 	e.do("GET", "/api/v1/devices/abc", e.token, nil, 404, nil)
 
 	// Non-admin users can read but not modify.
-	if _, err := e.store.CreateUser(context.Background(), "viewer@fleet.local", "Viewer", "pw", store.RoleUser); err != nil {
+	if _, err := e.store.CreateUser(context.Background(), "viewer@fleet.local", "Viewer", "pw", store.RoleViewer); err != nil {
 		t.Fatal(err)
 	}
 	var login struct{ Token string }

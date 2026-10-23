@@ -16,7 +16,19 @@ const EventNotifications = "notifications"
 
 // NotifyEventTypes are the event types users can configure notifications for.
 var NotifyEventTypes = []string{EventGeofenceEnter, EventGeofenceExit, EventOverspeed, EventIgnitionOn,
-	EventIgnitionOff, EventAlarm}
+	EventIgnitionOff, EventAlarm, EventHarshAcceleration, EventHarshBraking, EventHarshCornering, EventIdle,
+	EventMaintenanceDue, EventDocumentExpiry}
+
+// DefaultChannels returns the channels used for an event type the user has
+// not configured: everything on, except Telegram and push for the frequent
+// driver-behaviour and idle events.
+func DefaultChannels(eventType string) Channels {
+	switch eventType {
+	case EventHarshAcceleration, EventHarshBraking, EventHarshCornering, EventIdle:
+		return Channels{InApp: true}
+	}
+	return Channels{InApp: true, Telegram: true, Push: true}
+}
 
 // Channels selects the notification channels for one event type.
 type Channels struct {
@@ -28,13 +40,13 @@ type Channels struct {
 // EventPrefs maps event types to channels.
 type EventPrefs map[string]Channels
 
-// withDefaults returns p completed with the defaults (every channel on).
+// withDefaults returns p completed with the defaults (see DefaultChannels).
 func (p EventPrefs) withDefaults() EventPrefs {
 	out := make(EventPrefs, len(NotifyEventTypes))
 	for _, t := range NotifyEventTypes {
 		c, ok := p[t]
 		if !ok {
-			c = Channels{InApp: true, Telegram: true, Push: true}
+			c = DefaultChannels(t)
 		}
 		out[t] = c
 	}

@@ -420,3 +420,121 @@ Driver score: `100 − (overspeeds×5 + harsh×3 + idleHours×2)` per 100 km dri
   "expenses": { "total": 1234.5, "currency": "USD" },   // current month
   "utilization": 0.42 }   // driving time / (vehicles × period), 0..1
 ```
+
+## Phase 3 implementation notes — management module (clarifications, all additive)
+
+- **Access control.** Roles are read from the live user record on every request (not only the JWT), so
+  demotion, deactivation or deletion takes effect immediately (`401` for deactivated/deleted users,
+  including open WebSockets which are closed). Devices outside the caller's scope answer `404` (same as
+  missing). Login of a deactivated account → `403 {"error": "this account is deactivated"}`.
+  Role checks: viewers get `403` on every write; `POST /devices`, `/groups` writes, `/users`, settings
+  writes are admin-only; managers may `PATCH`/`DELETE` devices in their groups and send non-engine
+  commands to them (`engineStop`/`engineResume`/`custom` stay admin-only).
+- **Geofences for non-admins.** `GET /geofences` returns geofences for all devices (`deviceIds: []`) plus
+  those assigned to at least one visible device, with `deviceIds` narrowed to the visible ones. Managers may
+  create/edit/delete only geofences whose `deviceIds` are non-empty and all in their groups; geofences for
+  all devices are admin-only (`403`).
+- **Live updates.** Position/device/event/command frames are filtered per client. When groups, memberships or
+  roles change, each client receives `{"type":"device"}` for newly visible devices and
+  `{"type":"deleted","data":{"id"}}` for devices it can no longer see. `deleted`, `geofences`,
+  `notifications` frames go to everyone. Telegram/push notifications are likewise only sent to users who can
+  see the event's device.
+- **Users.** `User` also has `createdAt`, `lastLoginAt` (null until first login). `POST /users` accepts
+  `active` (default true); `PATCH /users/{id}` accepts `email, name, password, role, groupIds, active`.
+  Passwords set via the API need ≥ 6 characters. Self-demotion/deactivation/deletion and removing,
+  demoting or deactivating the last active admin → `400`. `GET /groups` for non-admins returns their groups.
+  `PATCH /me`: `newPassword` requires the correct `currentPassword` (`400 "current password is incorrect"`);
+  returns the `User`.
+- **Groups.** `color` defaults to `#ffd700` (`#rgb`/`#rrggbb`, stored lower-case); unknown `deviceIds`/`groupIds` → `400`.
+- **Devices.** `POST`/`PATCH /devices` additionally accept `groupIds` (admin only), `odometer` (km),
+  `engineHours` (h) and `driverId` (manual driver assignment, `null` unassigns). Odometer = last tracker
+  `attributes.odometer` (m → km) when the device ever reported one, else accumulated GPS distance between
+  consecutive valid in-order fixes (segments where both fixes are ≤ 3 km/h and < 100 m apart are treated as
+  parking drift; jumps implying > 300 km/h are ignored). Engine hours accumulate the time between consecutive
+  in-order fixes while the earlier fix had ignition on (gaps > 15 min are not counted). Counters start at 0 on
+  upgrade (no back-fill of history); calibrate via `PATCH`. Values are rounded to 0.1.
+- **Drivers.** A driver can be assigned to one vehicle at a time and a vehicle has one manual driver
+  (assigning moves it). Tags are stored upper-case and compared ignoring leading zeros; duplicates → `400`.
+  `Device.driverId` = driver whose tag the latest fixes report (kept until a fix without a tag has ignition
+  off), else the manually assigned driver. Non-admins see unassigned drivers and drivers of visible vehicles.
+- **Maintenance.** `POST` defaults: `lastServiceDate` today (UTC), `lastServiceKm`/`lastServiceHours` the
+  device's current counters; at least one interval is required. km/hours items are `overdue` when remaining
+  ≤ 0, date items when the due date has passed (due today = `dueSoon`); `dueSoon` when remaining ≤ the
+  `notifyBefore*` value. `POST /maintenance/{id}/complete` (`date` defaults to today, odometer/engineHours to
+  the current counters) returns the updated `Maintenance`; the expense it creates has notes
+  `"<item name>: <notes>"`. `ServiceRecord` also has `createdAt`.
+- **Reminders.** `deviceId` and/or `driverId` (both optional, `null` clears on PATCH); `notifyDaysBefore`
+  defaults to 14; `Reminder` also has `remainingDays` and `createdAt`. Visibility: device reminders follow the
+  device, driver-only reminders the driver's vehicle; reminders with neither are visible to everyone.
+  A driver-only reminder whose driver has no vehicle produces no `documentExpiry` event (events need a device)
+  but still shows its status.
+- **Due events.** The due check runs at startup, every 10 min and right after maintenance/reminder edits,
+  completions and counter calibration. Event `time` is the check time, lat/lng the device's last position.
+  `maintenanceDue` attributes: `{itemId, name, status, nextDueKm?, remainingKm?, nextDueDate?, remainingDays?,
+  nextDueHours?, remainingHours?}`; `documentExpiry`: `{itemId, name, kind, status, dueDate, remainingDays,
+  driverId?}`. Going back to `ok` (service done, renewal) re-arms silently.
+- **Expenses.** `date` defaults to today; `from`/`to` are inclusive dates (RFC 3339 times accepted, date part
+  used); list is newest first, max 1000 rows. `liters`, `odometer`, `driverId` are nullable.
+- **Share links.** `hours` default 24, range (0, 720]. `POST` → 201 `{token, url, deviceId, createdAt, expiresAt}`;
+  `GET /devices/{id}/shares` lists active links (admin/manager); `DELETE /shares/{token}` → 204. Public response
+  `position` = `{time, lat, lng, altitude, speed, course, valid, attributes}` with only `ignition`/`motion`
+  attributes; unknown token → 404, expired/revoked → 410.
+
+## Phase 3 implementation notes — analytics module (clarifications, all additive)
+
+- **Report query params.** Besides `deviceIds`, `groupId`, `driverId`, `from`, `to`, `format`, reports and the
+  dashboard accept `tz=<IANA zone>` (default `UTC`): it sets day boundaries (`daily`, dashboard days, expenses
+  dates, current month) and the times printed in CSV/XLSX/PDF. JSON times stay RFC 3339 UTC.
+  `deviceIds` naming a device outside the caller's scope → 404 `device not found`; unknown `groupId` → 404
+  `group not found`; range > 93 days, bad `format`/`tz` → 400; unknown type → 404.
+  `driverId` filters rows attributable to a driver (`trips`, `overspeed`, `driver`, `expenses`); other reports ignore it.
+- **`GET /reports`** → `[{"type","title"}]` (the 13 types in menu order).
+- **Report shape additions.** `Report` also carries `"subtitle"` (e.g. the driver-score formula), `"timezone"`,
+  `"truncated": true` when the 50 000-row cap was hit, and optional `"subtotals": [{"label","values"}]`
+  (`expenses`: one per category, values keyed by column key). Rows carry extra id/coordinate keys not listed in
+  `columns` (`deviceId`, `driverId`, `eventId`, `startLat/startLng/endLat/endLng`, `lat/lng`, `idleTime`,
+  `ongoing`, `geofenceId`, `expenseId`, `maintenanceId`, raw `nextDue*`/`remaining*`). Missing values are `null`.
+  `kind: "text"` is used for dates (`"2026-10-16"`), `stops.ignition` (`"on"|"off"`) and `maintenance`
+  `nextDue`/`remaining` (e.g. `"90000 km · 2027-01-28"`). Units: `km`, `km/h`, `h` (engineHours), `L`,
+  the currency code for `money`.
+- **Definitions.** Fix-to-fix segments are classified by the state at the earlier fix: *driving* (speed > 3 km/h;
+  a gap > 5 min after a moving fix counts as stopped), *idle* (ignition on, ≤ 3 km/h), else *stopped*.
+  `drivingTime`/`idleTime`/`stopTime` sum these; `engineHours` = ignition-on time (or driving when ignition is
+  not reported). `distance` = sum of trip distances (trip detection as `/devices/{id}/trips`), so
+  `summary.distance` = Σ `trips.distance`; `daily` splits a trip's distance across midnight in proportion to time.
+  `avgSpeed` = distance / drivingTime. `stops` = stationary periods ≥ 5 min between trips (also before the
+  first / after the last trip, `ongoing: true`); `ignition` is `"on"` when the ignition was on for ≥ half of it.
+  `idle` = idle runs ≥ 3 min (incl. at traffic lights). `ignition` rows with `off: null` were still on at the end.
+  `fuelUsed` (summary, only when reported) = last − first `attributes.fuelUsed`. `geofence` visits pair
+  enter/exit events: `enter: null` = inside since before `from` (duration counted from `from`), `exit: null` =
+  still inside (duration until `to`/now). `alerts` = all events except `commandResult`. `systemLog` counts packets
+  by server (arrival) time in `[from, to]` (buffered records up to 24 h old by device time included);
+  `longestGap`/`avgInterval` are seconds (`kind: duration`).
+- **Drivers.** A position's driver is the driver whose `tag` matches `attributes.driverId` (case-insensitive,
+  leading zeros ignored), else the driver assigned to the device. Trips use the first tag seen during the trip;
+  overspeed/harsh events the tag of the latest fix at the event time. Driving without a known driver is reported
+  per vehicle (`driver` = vehicle name, `driverId: null`, `deviceId` set). Score:
+  `100 − (overspeeds×5 + harsh×3 + idleHours×2) / (km/100)`, clamped 0–100, distances under 10 km count as 10 km;
+  harsh events are not scored when `harshScoring` is off.
+- **Addresses** in reports come from places (nearest covering place name) and the geocode cache only; missing
+  ones fall back to `"lat, lng"` (5 decimals) and are queued for background geocoding (later reports show them).
+  `GET /geocode` does a live lookup (≤ 5 s, rate limited) when not cached. Nominatim "no address" answers are
+  cached too. Changing places publishes WebSocket `{"type":"places"}` (no data).
+- **Dashboard.** `days` 1–93 (default 7); the period is local midnight `days−1` days ago until now;
+  `distanceByDay` has one entry per day (zeros included); `topVehicles` top 5, `driverScores` top 10 by score
+  (vehicle buckets carry `deviceId`), `alertsByType` excludes `commandResult`; also returns `from`/`to`.
+  Cached for 60 s per scope.
+- **Exports.** CSV: UTF-8 with BOM, header labels with units, durations `h:mm:ss`, times `YYYY-MM-DD HH:MM`
+  in `tz`, then a `Total` row and `Total <category>` subtotal rows. XLSX: data sheet (navy bold header, frozen,
+  autofilter, typed number/date/`[h]:mm:ss` cells, totals row) plus an `Info` sheet. PDF: landscape A4,
+  repeated table header, `Page x of y`; core fonts, so characters outside Windows-1252 print as `?`.
+  `Content-Disposition: attachment; filename="<type>_<from>_<to>.<ext>"` (dates in `tz`).
+- **Events.** Teltonika: a record with EventID 253 sets `attributes.harsh` (`acceleration|braking|cornering`
+  for IO 253 = 1/2/3) and `attributes.harshValue` (g, IO 254 / 100). Traccar `hardAcceleration/hardBraking/
+  hardCornering` alarms become `attributes.harsh` (removed from `alarm`). Harsh events carry
+  `{speed, value?}`; they also fire on a device's very first fix (momentary, like alarms). `idle` fires once per
+  idle period when it reaches `idleAlertMinutes` (`attributes.minutes`); after a restart an idle period already in
+  progress is assumed reported.
+- **Settings.** `currency`: 3-letter code (upper-cased); `idleAlertMinutes`: whole number 0–1440.
+- **Env.** `GEOCODER=nominatim|off` (default nominatim), `GEOCODER_URL` (default
+  `https://nominatim.openstreetmap.org`), User-Agent `SomtelFleet/1.0`.

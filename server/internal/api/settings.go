@@ -17,6 +17,9 @@ type settingsView struct {
 	TelegramConfigured   bool    `json:"telegramConfigured"`
 	TelegramBotUsername  string  `json:"telegramBotUsername"`
 	TraccarToken         string  `json:"traccarToken"` // admins only
+	Currency             string  `json:"currency"`
+	IdleAlertMinutes     int     `json:"idleAlertMinutes"`
+	HarshScoring         bool    `json:"harshScoring"`
 }
 
 func viewSettings(cfg store.Settings, admin bool) settingsView {
@@ -25,11 +28,27 @@ func viewSettings(cfg store.Settings, admin bool) settingsView {
 		OverspeedMinDuration: cfg.OverspeedMinDuration,
 		TelegramConfigured:   cfg.TelegramBotToken != "",
 		TelegramBotUsername:  cfg.TelegramBotUsername,
+		Currency:             cfg.Currency,
+		IdleAlertMinutes:     cfg.IdleAlertMinutes,
+		HarshScoring:         cfg.HarshScoring,
 	}
 	if admin {
 		v.TraccarToken = cfg.TraccarToken
 	}
 	return v
+}
+
+// validCurrency accepts three upper-case ASCII letters (ISO 4217 format).
+func validCurrency(c string) bool {
+	if len(c) != 3 {
+		return false
+	}
+	for i := 0; i < 3; i++ {
+		if c[i] < 'A' || c[i] > 'Z' {
+			return false
+		}
+	}
+	return true
 }
 
 func isAdmin(r *http.Request) bool { return principalFrom(r.Context()).Role == store.RoleAdmin }
@@ -43,6 +62,9 @@ func (s *Server) handlePatchSettings(w http.ResponseWriter, r *http.Request) {
 		SpeedLimit           *float64 `json:"speedLimit"`
 		OverspeedMinDuration *float64 `json:"overspeedMinDuration"`
 		TelegramBotToken     *string  `json:"telegramBotToken"`
+		Currency             *string  `json:"currency"`
+		IdleAlertMinutes     *float64 `json:"idleAlertMinutes"`
+		HarshScoring         *bool    `json:"harshScoring"`
 	}
 	if err := decodeJSON(w, r, &req); err != nil {
 		s.fail(w, r, err)
@@ -54,6 +76,18 @@ func (s *Server) handlePatchSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if v := req.OverspeedMinDuration; v != nil && !(*v >= 0 && *v <= 3600 && *v == math.Trunc(*v)) {
 		writeError(w, http.StatusBadRequest, "overspeedMinDuration must be a whole number of seconds between 0 and 3600")
+		return
+	}
+	if req.Currency != nil {
+		c := strings.ToUpper(strings.TrimSpace(*req.Currency))
+		if !validCurrency(c) {
+			writeError(w, http.StatusBadRequest, "currency must be a 3-letter ISO 4217 code such as USD")
+			return
+		}
+		req.Currency = &c
+	}
+	if v := req.IdleAlertMinutes; v != nil && !(*v >= 0 && *v <= 1440 && *v == math.Trunc(*v)) {
+		writeError(w, http.StatusBadRequest, "idleAlertMinutes must be a whole number of minutes between 0 and 1440")
 		return
 	}
 	// The token is validated against Telegram first, so a bad token leaves
@@ -70,6 +104,15 @@ func (s *Server) handlePatchSettings(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.OverspeedMinDuration != nil {
 			cfg.OverspeedMinDuration = int(*req.OverspeedMinDuration)
+		}
+		if req.Currency != nil {
+			cfg.Currency = *req.Currency
+		}
+		if req.IdleAlertMinutes != nil {
+			cfg.IdleAlertMinutes = int(*req.IdleAlertMinutes)
+		}
+		if req.HarshScoring != nil {
+			cfg.HarshScoring = *req.HarshScoring
 		}
 		return nil
 	})

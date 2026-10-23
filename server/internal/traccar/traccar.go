@@ -124,6 +124,13 @@ var alarms = map[string]string{
 	"accident": "crash",
 }
 
+// harshAlarms maps Traccar driver-behaviour alarms to domain.AttrHarsh values.
+var harshAlarms = map[string]string{
+	"hardAcceleration": "acceleration",
+	"hardBraking":      "braking",
+	"hardCornering":    "cornering",
+}
+
 // mapAttributes normalizes Traccar attributes. sat, priority and event move
 // to position fields; totalDistance stands in for a missing odometer.
 func mapAttributes(in map[string]any) (attrs map[string]any, sat, priority, event int) {
@@ -144,15 +151,28 @@ func mapAttributes(in map[string]any) (attrs map[string]any, sat, priority, even
 			continue
 		case domain.AttrAlarm:
 			if s, ok := v.(string); ok {
-				parts := strings.Split(s, ",")
-				for i, a := range parts {
+				var kept []string
+				for _, a := range strings.Split(s, ",") {
 					a = strings.TrimSpace(a)
+					if h, ok := harshAlarms[a]; ok {
+						// Driver behaviour is not a device alarm: it becomes
+						// the normalized harsh attribute (first one wins).
+						if _, set := attrs[domain.AttrHarsh]; !set {
+							attrs[domain.AttrHarsh] = h
+						}
+						continue
+					}
 					if m, ok := alarms[a]; ok {
 						a = m
 					}
-					parts[i] = a
+					if a != "" {
+						kept = append(kept, a)
+					}
 				}
-				v = strings.Join(parts, ",")
+				if len(kept) == 0 {
+					continue
+				}
+				v = strings.Join(kept, ",")
 			}
 		case domain.AttrIgnition, domain.AttrMotion:
 			v = asBool(v)

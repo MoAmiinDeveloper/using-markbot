@@ -99,3 +99,30 @@ func TestConcurrentPublish(t *testing.T) {
 		}
 	}
 }
+
+type scoped struct{ ID int64 }
+
+func (s scoped) ScopeDeviceID() int64 { return s.ID }
+
+func TestFilteredClients(t *testing.T) {
+	h := New(8, nil)
+	all := h.Subscribe()
+	only1 := h.SubscribeFiltered(func(id int64) bool { return id == 1 })
+
+	h.Publish("position", scoped{ID: 1})
+	h.Publish("position", scoped{ID: 2})
+	h.Publish("geofences", nil) // not device-scoped: everyone
+
+	if len(all.C) != 3 {
+		t.Fatalf("unfiltered client got %d frames", len(all.C))
+	}
+	if len(only1.C) != 2 {
+		t.Fatalf("filtered client got %d frames, want 2", len(only1.C))
+	}
+	var m struct {
+		Data scoped `json:"data"`
+	}
+	if err := json.Unmarshal(<-only1.C, &m); err != nil || m.Data.ID != 1 {
+		t.Fatalf("first frame %+v %v", m, err)
+	}
+}

@@ -19,11 +19,23 @@ const (
 	EventIgnitionOff   = "ignitionOff"
 	EventAlarm         = "alarm"
 	EventCommandResult = "commandResult"
+
+	// Phase 3: driver behaviour, idling, maintenance and document reminders.
+	EventHarshAcceleration = "harshAcceleration"
+	EventHarshBraking      = "harshBraking"
+	EventHarshCornering    = "harshCornering"
+	EventIdle              = "idle"
+	EventMaintenanceDue    = "maintenanceDue"
+	EventDocumentExpiry    = "documentExpiry"
 )
 
 // EventTypes lists every event type.
 var EventTypes = []string{EventGeofenceEnter, EventGeofenceExit, EventOverspeed, EventIgnitionOn,
-	EventIgnitionOff, EventAlarm, EventCommandResult}
+	EventIgnitionOff, EventAlarm, EventCommandResult, EventHarshAcceleration, EventHarshBraking,
+	EventHarshCornering, EventIdle, EventMaintenanceDue, EventDocumentExpiry}
+
+// HarshEventTypes are the driver-behaviour event types.
+var HarshEventTypes = []string{EventHarshAcceleration, EventHarshBraking, EventHarshCornering}
 
 // EventEvent is the live event type carrying a new Event.
 const EventEvent = "event"
@@ -96,6 +108,10 @@ type EventFilter struct {
 	Types    []string
 	From, To time.Time
 	Limit    int
+	// Scoped restricts the result to DeviceIDs (access control); an empty
+	// DeviceIDs then matches nothing.
+	Scoped    bool
+	DeviceIDs []int64
 }
 
 // Events returns matching events, newest first.
@@ -109,6 +125,10 @@ func (s *Store) Events(ctx context.Context, f EventFilter) ([]Event, error) {
 	if len(f.Types) > 0 {
 		args = append(args, f.Types)
 		where = append(where, fmt.Sprintf("type = ANY($%d)", len(args)))
+	}
+	if f.Scoped {
+		args = append(args, f.DeviceIDs)
+		where = append(where, fmt.Sprintf("device_id = ANY($%d)", len(args)))
 	}
 	args = append(args, f.Limit)
 	rows, err := s.pool.Query(ctx, `SELECT `+eventColumns+` FROM events WHERE `+strings.Join(where, " AND ")+

@@ -126,3 +126,31 @@ func TestDecodeInvalid(t *testing.T) {
 		}
 	}
 }
+
+func TestHarshAlarms(t *testing.T) {
+	cases := []struct {
+		alarm      string
+		harsh, out any
+	}{
+		{"hardBraking", "braking", nil},
+		{"hardAcceleration", "acceleration", nil},
+		{"hardCornering", "cornering", nil},
+		{"sos,hardBraking", "braking", "sos"},
+		{"tow", nil, "towing"},
+	}
+	for _, c := range cases {
+		body := `{"position":{"latitude":1,"longitude":2,"fixTime":"2026-10-22T10:00:00Z","attributes":{"alarm":"` +
+			c.alarm + `"}},"device":{"uniqueId":"1"}}`
+		fix, err := Decode([]byte(body), time.Now())
+		if err != nil {
+			t.Fatal(err)
+		}
+		a := fix.Position.Attributes
+		if a["harsh"] != c.harsh || a["alarm"] != c.out {
+			t.Errorf("%s: harsh=%v alarm=%v, want %v %v", c.alarm, a["harsh"], a["alarm"], c.harsh, c.out)
+		}
+		if _, ok := a["alarm"]; !ok && c.out != nil {
+			t.Errorf("%s: alarm missing", c.alarm)
+		}
+	}
+}

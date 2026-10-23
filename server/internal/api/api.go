@@ -15,8 +15,10 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	"github.com/moamiindeveloper/fleet/server/internal/commands"
+	"github.com/moamiindeveloper/fleet/server/internal/geocode"
 	"github.com/moamiindeveloper/fleet/server/internal/hub"
 	"github.com/moamiindeveloper/fleet/server/internal/notify"
+	"github.com/moamiindeveloper/fleet/server/internal/reports"
 	"github.com/moamiindeveloper/fleet/server/internal/store"
 )
 
@@ -36,6 +38,10 @@ type Config struct {
 	Notifier *notify.Service
 	Commands *commands.Service
 	Logger   *slog.Logger
+	// Geocoder resolves addresses (/geocode, report addresses); when nil a
+	// places-only geocoder is used. Reports defaults to an engine on the store.
+	Geocoder *geocode.Service
+	Reports  *reports.Engine
 }
 
 // Server holds the API dependencies.
@@ -110,14 +116,19 @@ func (s *Server) routes() http.Handler {
 				s.mountAnalytics(r)
 				s.mountManagement(r)
 
+				// Managers: only devices / geofences within their groups (checked inside).
 				r.Group(func(r chi.Router) {
-					r.Use(requireAdmin)
-					r.Post("/devices", s.handleCreateDevice)
+					r.Use(requireManager)
 					r.Patch("/devices/{id}", s.handleUpdateDevice)
 					r.Delete("/devices/{id}", s.handleDeleteDevice)
 					r.Post("/geofences", s.handleCreateGeofence)
 					r.Patch("/geofences/{id}", s.handleUpdateGeofence)
 					r.Delete("/geofences/{id}", s.handleDeleteGeofence)
+				})
+
+				r.Group(func(r chi.Router) {
+					r.Use(requireAdmin)
+					r.Post("/devices", s.handleCreateDevice)
 					r.Patch("/settings", s.handlePatchSettings)
 					r.Post("/settings/traccar-token", s.handleRegenerateTraccarToken)
 				})
@@ -148,8 +159,8 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-func (s *Server) handleSummary(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, s.store.Summary())
+func (s *Server) handleSummary(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, s.store.SummaryScoped(s.deviceScope(r)))
 }
 
 // writeJSON writes v as a JSON response.
@@ -171,10 +182,17 @@ func (s *Server) fail(w http.ResponseWriter, r *http.Request, err error) {
 
 // failAs is fail with the message used for store.ErrNotFound.
 func (s *Server) failAs(w http.ResponseWriter, r *http.Request, err error, notFound string) {
-	var ve *store.ValidationError
+	var (
+		ve *store.ValidationError
+		fe *forbiddenError
+	)
 	switch {
 	case errors.As(err, &ve):
 		writeError(w, http.StatusBadRequest, ve.Msg)
+	case errors.As(err, &fe):
+		writeError(w, http.StatusForbidden, fe.msg)
+	case errors.Is(err, errGone):
+		writeError(w, http.StatusGone, err.Error())
 	case errors.Is(err, store.ErrNotFound):
 		writeError(w, http.StatusNotFound, notFound)
 	case errors.Is(err, commands.ErrForbidden):

@@ -57,6 +57,15 @@ var eventAlarms = map[uint16]string{
 	252: "powerCut", // unplug
 }
 
+// Green driving: a record triggered by IO 253 (type 1 acceleration, 2 braking,
+// 3 cornering) carries the measured value in IO 254 (g × 100).
+const (
+	ioGreenDrivingType  = 253
+	ioGreenDrivingValue = 254
+)
+
+var greenDriving = map[uint64]string{1: "acceleration", 2: "braking", 3: "cornering"}
+
 // priorityPanic is the record priority Teltonika uses for panic/SOS.
 const priorityPanic = 2
 
@@ -110,6 +119,15 @@ func (r *Record) Position(imei string, serverTime time.Time) domain.Position {
 	if alarm, ok := eventAlarms[r.EventID]; ok {
 		if v, _ := r.IOValue(r.EventID); v != 0 {
 			attrs[domain.AttrAlarm] = alarm
+		}
+	}
+	if r.EventID == ioGreenDrivingType {
+		v, _ := r.IOValue(ioGreenDrivingType)
+		if kind, ok := greenDriving[v]; ok {
+			attrs[domain.AttrHarsh] = kind
+			if g, ok := r.IOValue(ioGreenDrivingValue); ok {
+				attrs[domain.AttrHarshValue] = float64(g) / 100
+			}
 		}
 	}
 	if _, set := attrs[domain.AttrAlarm]; !set && r.Priority == priorityPanic {

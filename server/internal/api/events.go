@@ -52,6 +52,10 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 		}
 		f.Limit = min(f.Limit, maxEventLimit)
 	}
+	f.Scoped, f.DeviceIDs = false, nil
+	if all, ids := s.scopeIDs(r); !all {
+		f.Scoped, f.DeviceIDs = true, ids
+	}
 	evs, err := s.store.Events(r.Context(), f)
 	if err != nil {
 		s.fail(w, r, err)
@@ -70,13 +74,71 @@ func geofenceID(r *http.Request) (int64, error) {
 
 const geofenceNotFound = "geofence not found"
 
-func (s *Server) handleListGeofences(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, s.store.Geofences())
+// handleListGeofences returns, for non-admins, the geofences that apply to
+// all devices or to at least one visible device, with deviceIds narrowed to
+// the visible ones.
+func (s *Server) handleListGeofences(w http.ResponseWriter, r *http.Request) {
+	all, ids := s.deviceScope(r)
+	gs := s.store.Geofences()
+	if all {
+		writeJSON(w, http.StatusOK, gs)
+		return
+	}
+	out := make([]store.Geofence, 0, len(gs))
+	for _, g := range gs {
+		if len(g.DeviceIDs) == 0 {
+			out = append(out, g)
+			continue
+		}
+		var visible []int64
+		for _, id := range g.DeviceIDs {
+			if ids[id] {
+				visible = append(visible, id)
+			}
+		}
+		if len(visible) > 0 {
+			g.DeviceIDs = visible
+			out = append(out, g)
+		}
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// checkGeofenceDevices enforces the manager rule: a manager may only write
+// geofences assigned to devices of their groups (non-empty deviceIds, all
+// visible). Geofences for all devices (deviceIds []) are admin-only.
+func (s *Server) checkGeofenceDevices(r *http.Request, deviceIDs []int64) error {
+	all, ids := s.deviceScope(r)
+	if all {
+		return nil
+	}
+	if len(deviceIDs) == 0 {
+		return errForbidden("only admins can manage geofences that apply to all devices")
+	}
+	for _, id := range deviceIDs {
+		if !ids[id] {
+			return errForbidden("geofence includes devices outside your groups")
+		}
+	}
+	return nil
+}
+
+func (s *Server) geofenceByID(id int64) (store.Geofence, error) {
+	for _, g := range s.store.Geofences() {
+		if g.ID == id {
+			return g, nil
+		}
+	}
+	return store.Geofence{}, store.ErrNotFound
 }
 
 func (s *Server) handleCreateGeofence(w http.ResponseWriter, r *http.Request) {
 	var in store.GeofenceInput
 	if err := decodeJSON(w, r, &in); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	if err := s.checkGeofenceDevices(r, in.DeviceIDs); err != nil {
 		s.fail(w, r, err)
 		return
 	}
@@ -99,6 +161,17 @@ func (s *Server) handleUpdateGeofence(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
+	cur, err := s.geofenceByID(id)
+	if err == nil {
+		err = s.checkGeofenceDevices(r, cur.DeviceIDs)
+	}
+	if err == nil && p.DeviceIDs != nil {
+		err = s.checkGeofenceDevices(r, *p.DeviceIDs)
+	}
+	if err != nil {
+		s.failAs(w, r, err, geofenceNotFound)
+		return
+	}
 	g, err := s.store.UpdateGeofence(r.Context(), id, p)
 	if err != nil {
 		s.failAs(w, r, err, geofenceNotFound)
@@ -109,6 +182,13 @@ func (s *Server) handleUpdateGeofence(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleDeleteGeofence(w http.ResponseWriter, r *http.Request) {
 	id, err := geofenceID(r)
+	var cur store.Geofence
+	if err == nil {
+		cur, err = s.geofenceByID(id)
+	}
+	if err == nil {
+		err = s.checkGeofenceDevices(r, cur.DeviceIDs)
+	}
 	if err == nil {
 		err = s.store.DeleteGeofence(r.Context(), id)
 	}

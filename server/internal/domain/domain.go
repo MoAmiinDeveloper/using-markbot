@@ -52,9 +52,11 @@ const (
 	AttrDriverID     = "driverId"     // iButton / RFID (string)
 	AttrSleepMode    = "sleepMode"    // int
 	AttrMovement     = AttrMotion
-	AttrInputPrefix  = "in"    // in1, in2 … digital inputs (bool)
-	AttrOutputPrefix = "out"   // out1, out2 … digital outputs (bool)
-	AttrAlarm        = "alarm" // string, e.g. "sos", "overspeed", "towing", "crash", "jamming"
+	AttrInputPrefix  = "in"         // in1, in2 … digital inputs (bool)
+	AttrOutputPrefix = "out"        // out1, out2 … digital outputs (bool)
+	AttrAlarm        = "alarm"      // string, e.g. "sos", "overspeed", "towing", "crash", "jamming"
+	AttrHarsh        = "harsh"      // string: "acceleration" | "braking" | "cornering"
+	AttrHarshValue   = "harshValue" // g (float64), when reported
 )
 
 // Sink is what the gateway hands decoded data to. The store/API layer

@@ -15,14 +15,21 @@ import (
 	"github.com/moamiindeveloper/fleet/server/internal/store"
 )
 
-// userToken creates a non-admin user and returns its token.
+// userToken creates a viewer (no groups) and returns its token.
 func (e *env) userToken() string {
 	e.t.Helper()
-	if _, err := e.store.CreateUser(context.Background(), "user@fleet.local", "User", "pw", store.RoleUser); err != nil {
+	return e.roleToken("user@fleet.local", store.RoleViewer)
+}
+
+// roleToken creates a user with the given role and groups and returns its token.
+func (e *env) roleToken(email, role string, groups ...int64) string {
+	e.t.Helper()
+	if _, err := e.store.CreateUserFull(context.Background(), store.UserInput{Email: email, Name: role,
+		Password: "secret1", Role: role, GroupIDs: groups}); err != nil {
 		e.t.Fatal(err)
 	}
 	var login struct{ Token string }
-	e.do("POST", "/api/v1/auth/login", "", map[string]string{"email": "user@fleet.local", "password": "pw"}, 200, &login)
+	e.do("POST", "/api/v1/auth/login", "", map[string]string{"email": email, "password": "secret1"}, 200, &login)
 	return login.Token
 }
 
@@ -78,6 +85,16 @@ func TestPhase2Authz(t *testing.T) {
 	for _, typ := range []string{"engineStop", "engineResume", "custom"} {
 		e.do("POST", "/api/v1/devices/"+itoa(d.ID)+"/commands", user, map[string]string{"type": typ, "text": "getver"}, 403, nil)
 	}
+	// Viewers cannot send any command; managers of the device's group can
+	// send non-engine commands.
+	e.do("POST", "/api/v1/devices/"+itoa(d.ID)+"/commands", user, map[string]string{"type": "getVersion"}, 403, nil)
+	var g store.Group
+	e.do("POST", "/api/v1/groups", e.token, map[string]any{"name": "G", "deviceIds": []int64{d.ID}}, 201, &g)
+	mgr := e.roleToken("mgr@fleet.local", store.RoleManager, g.ID)
+	for _, typ := range []string{"engineStop", "engineResume", "custom"} {
+		e.do("POST", "/api/v1/devices/"+itoa(d.ID)+"/commands", mgr, map[string]string{"type": typ, "text": "getver"}, 403, nil)
+	}
+	user = mgr
 	var c store.Command
 	e.do("POST", "/api/v1/devices/"+itoa(d.ID)+"/commands", user, map[string]string{"type": "getVersion"}, 202, &c)
 	if c.Status != "queued" || c.Text != "getver" || c.CompletedAt != nil {
@@ -264,7 +281,7 @@ func TestNotificationsAPI(t *testing.T) {
 		Events         map[string]store.Channels `json:"events"`
 	}
 	e.do("GET", "/api/v1/me/notifications", e.token, nil, 200, &prefs)
-	if prefs.TelegramLinked || prefs.Push.Enabled || len(prefs.Events) != 6 ||
+	if prefs.TelegramLinked || prefs.Push.Enabled || len(prefs.Events) != len(store.NotifyEventTypes) || len(prefs.Events) != 12 ||
 		prefs.Events["alarm"] != (store.Channels{InApp: true, Telegram: true, Push: true}) {
 		t.Fatalf("defaults %+v", prefs)
 	}

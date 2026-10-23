@@ -12,13 +12,19 @@ import (
 	"github.com/moamiindeveloper/fleet/server/internal/domain"
 )
 
-const upsertStateSQL = `INSERT INTO device_state AS s (device_id, position_time, position, last_seen)
-VALUES ($1, $2, $3, $4)
+// The counters ($5 distance, $6 engine seconds, $7 tracker odometer) are
+// increments computed from the in-order fixes of the batch.
+const upsertStateSQL = `INSERT INTO device_state AS s (device_id, position_time, position, last_seen,
+	gps_distance, engine_seconds, tracker_odometer)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 ON CONFLICT (device_id) DO UPDATE SET
 	last_seen     = GREATEST(s.last_seen, EXCLUDED.last_seen),
 	position      = CASE WHEN s.position_time IS NULL OR EXCLUDED.position_time > s.position_time
 	                     THEN EXCLUDED.position ELSE s.position END,
-	position_time = GREATEST(s.position_time, EXCLUDED.position_time)`
+	position_time = GREATEST(s.position_time, EXCLUDED.position_time),
+	gps_distance     = s.gps_distance + EXCLUDED.gps_distance,
+	engine_seconds   = s.engine_seconds + EXCLUDED.engine_seconds,
+	tracker_odometer = COALESCE(EXCLUDED.tracker_odometer, s.tracker_odometer)`
 
 const insertPositionSQL = `INSERT INTO positions (device_id, device_time, server_time, lat, lng, altitude,
 	speed, course, satellites, valid, priority, event_id, attributes)
@@ -99,6 +105,18 @@ func (s *Store) Positions(ctx context.Context, batch []domain.Position) error {
 		newest[ps[i].DeviceID] = &ps[i]
 	}
 
+	// Odometer / engine-hour increments from fixes newer than the cache.
+	latest := make(map[int64]*domain.Position, len(newest))
+	lastFix := make(map[int64]*domain.Position, len(newest))
+	s.mu.RLock()
+	for id := range newest {
+		if e, ok := s.devices[id]; ok {
+			latest[id], lastFix[id] = e.dev.Position, e.lastFix
+		}
+	}
+	s.mu.RUnlock()
+	deltas := computeDeltas(ps, latest, lastFix)
+
 	b := &pgx.Batch{}
 	for i := range ps {
 		p := &ps[i]
@@ -110,7 +128,12 @@ func (s *Store) Positions(ctx context.Context, batch []domain.Position) error {
 		if err != nil {
 			return fmt.Errorf("encode position: %w", err)
 		}
-		b.Queue(upsertStateSQL, id, p.DeviceTime, js, now)
+		var dist, secs float64
+		var odo *float64
+		if d := deltas[id]; d != nil {
+			dist, secs, odo = d.distance, d.seconds, d.odometer
+		}
+		b.Queue(upsertStateSQL, id, p.DeviceTime, js, now, dist, secs, odo)
 	}
 	// Resent records hit the unique key and are skipped; inserted marks the rest.
 	inserted := make([]bool, len(ps))
@@ -127,7 +150,7 @@ func (s *Store) Positions(ctx context.Context, batch []domain.Position) error {
 		return fmt.Errorf("store positions: %w", err)
 	}
 
-	s.updateCache(ps, newest, now)
+	s.updateCache(ps, newest, deltas, now)
 
 	if s.hooks.Positions != nil {
 		fresh := make([]domain.Position, 0, len(ps))
@@ -144,9 +167,14 @@ func (s *Store) Positions(ctx context.Context, batch []domain.Position) error {
 }
 
 // updateCache advances the cached latest positions and publishes live updates.
-func (s *Store) updateCache(ps []domain.Position, newest map[int64]*domain.Position, now time.Time) {
+func (s *Store) updateCache(ps []domain.Position, newest map[int64]*domain.Position, deltas map[int64]*counterDelta, now time.Time) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	for id, d := range deltas {
+		if e, ok := s.devices[id]; ok {
+			e.counters.apply(d)
+		}
+	}
 	touched := make(map[int64]*deviceEntry, len(newest))
 	for i := range ps {
 		p := &ps[i]

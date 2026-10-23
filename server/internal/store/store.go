@@ -94,7 +94,19 @@ type Device struct {
 	Position   *domain.Position `json:"position"`
 	CreatedAt  time.Time        `json:"createdAt"`
 	UpdatedAt  time.Time        `json:"updatedAt"`
+
+	// Phase 3 (management module).
+	GroupIDs    []int64 `json:"groupIds"`
+	Odometer    float64 `json:"odometer"`    // km: tracker odometer if reported, else GPS distance; plus calibration offset
+	EngineHours float64 `json:"engineHours"` // h with ignition on, plus calibration offset
+	DriverID    *int64  `json:"driverId"`    // current driver (iButton tag match, else manual assignment)
+
+	odoOffset   float64 // km, devices.odometer_offset
+	hoursOffset float64 // h, devices.engine_hours_offset
 }
+
+// ScopeDeviceID lets the live hub filter device messages per client.
+func (d Device) ScopeDeviceID() int64 { return d.ID }
 
 // deviceEntry is the cached state of one device. Positions referenced from
 // the cache are never mutated after insertion, so they can be shared.
@@ -103,6 +115,8 @@ type deviceEntry struct {
 	conns        int    // open TCP sessions (a reconnect briefly overlaps the old one)
 	lastStatus   string // last status announced to the hub
 	lastCommands bool   // last Commands value announced to the hub
+
+	counters // odometer / engine-hour accumulators and current driver tag
 }
 
 // Store is the PostgreSQL-backed repository and domain.Sink. It is safe for
@@ -119,6 +133,11 @@ type Store struct {
 	byIMEI  map[string]int64
 
 	geofences atomic.Pointer[[]Geofence] // immutable snapshot, swapped on change
+
+	access   atomic.Pointer[accessSnapshot] // users, groups, memberships
+	accessMu sync.Mutex                     // serializes access reloads
+	drivers  atomic.Pointer[driverIndex]    // driver tags and manual assignments
+	upkeep   chan struct{}                  // kicked when maintenance/reminder inputs change
 
 	settingsMu sync.RWMutex
 	settings   Settings
@@ -159,6 +178,13 @@ func New(ctx context.Context, pool *pgxpool.Pool, opts Options) (*Store, error) 
 		log:     opts.Logger,
 		devices: make(map[int64]*deviceEntry),
 		byIMEI:  make(map[string]int64),
+		upkeep:  make(chan struct{}, 1),
+	}
+	if err := s.reloadAccess(ctx); err != nil {
+		return nil, fmt.Errorf("load access: %w", err)
+	}
+	if err := s.reloadDrivers(ctx); err != nil {
+		return nil, fmt.Errorf("load drivers: %w", err)
 	}
 	if err := s.loadCache(ctx); err != nil {
 		return nil, fmt.Errorf("load devices: %w", err)
@@ -173,11 +199,11 @@ func New(ctx context.Context, pool *pgxpool.Pool, opts Options) (*Store, error) 
 }
 
 const deviceColumns = `d.id, d.name, d.imei, d.protocol, d.plate, d.model, d.category, d.phone,
-	d.speed_limit, d.source, d.created_at, d.updated_at`
+	d.speed_limit, d.source, d.created_at, d.updated_at, d.odometer_offset, d.engine_hours_offset`
 
 func scanDevice(row pgx.Row, extra ...any) (Device, error) {
 	var d Device
-	dst := append([]any{&d.ID, &d.Name, &d.IMEI, &d.Protocol, &d.Plate, &d.Model, &d.Category, &d.Phone, &d.SpeedLimit, &d.Source, &d.CreatedAt, &d.UpdatedAt}, extra...)
+	dst := append([]any{&d.ID, &d.Name, &d.IMEI, &d.Protocol, &d.Plate, &d.Model, &d.Category, &d.Phone, &d.SpeedLimit, &d.Source, &d.CreatedAt, &d.UpdatedAt, &d.odoOffset, &d.hoursOffset}, extra...)
 	if err := row.Scan(dst...); err != nil {
 		return d, err
 	}
@@ -186,7 +212,8 @@ func scanDevice(row pgx.Row, extra ...any) (Device, error) {
 }
 
 func (s *Store) loadCache(ctx context.Context) error {
-	rows, err := s.pool.Query(ctx, `SELECT `+deviceColumns+`, s.position, s.last_seen
+	rows, err := s.pool.Query(ctx, `SELECT `+deviceColumns+`, s.position, s.last_seen,
+			COALESCE(s.gps_distance, 0), COALESCE(s.engine_seconds, 0), s.tracker_odometer
 		FROM devices d LEFT JOIN device_state s ON s.device_id = d.id`)
 	if err != nil {
 		return err
@@ -197,8 +224,9 @@ func (s *Store) loadCache(ctx context.Context) error {
 		var (
 			posJSON  []byte
 			lastSeen *time.Time
+			c        counters
 		)
-		d, err := scanDevice(rows, &posJSON, &lastSeen)
+		d, err := scanDevice(rows, &posJSON, &lastSeen, &c.gpsDistance, &c.engineSeconds, &c.trackerOdometer)
 		if err != nil {
 			return err
 		}
@@ -213,7 +241,8 @@ func (s *Store) loadCache(ctx context.Context) error {
 			}
 			d.Position = &p
 		}
-		e := &deviceEntry{dev: d}
+		c.init(d.Position)
+		e := &deviceEntry{dev: d, counters: c}
 		e.lastStatus = s.status(&e.dev, now)
 		s.devices[d.ID] = e
 		s.byIMEI[d.IMEI] = d.ID
@@ -250,6 +279,10 @@ func (s *Store) view(e *deviceEntry, now time.Time) Device {
 	d := e.dev
 	d.Status = s.status(&d, now)
 	d.Commands = d.Source == SourceDirect && e.conns > 0
+	d.GroupIDs = s.deviceGroupIDs(d.ID)
+	d.Odometer = round1(e.odometerKm() + d.odoOffset)
+	d.EngineHours = round1(e.engineSeconds/3600 + d.hoursOffset)
+	d.DriverID = s.currentDriver(d.ID, e.driverTag)
 	return d
 }
 
@@ -261,12 +294,18 @@ func (s *Store) publish(msgType string, data any) {
 }
 
 // Devices returns all devices ordered by name (then id).
-func (s *Store) Devices() []Device {
+func (s *Store) Devices() []Device { return s.DevicesScoped(true, nil) }
+
+// DevicesScoped returns the devices in a scope (see DeviceScope) ordered by
+// name (then id).
+func (s *Store) DevicesScoped(all bool, ids map[int64]bool) []Device {
 	now := s.opts.Now()
 	s.mu.RLock()
 	out := make([]Device, 0, len(s.devices))
-	for _, e := range s.devices {
-		out = append(out, s.view(e, now))
+	for id, e := range s.devices {
+		if all || ids[id] {
+			out = append(out, s.view(e, now))
+		}
 	}
 	s.mu.RUnlock()
 	sort.Slice(out, func(i, j int) bool {
@@ -302,12 +341,19 @@ type Summary struct {
 }
 
 // Summary returns fleet-wide status counts.
-func (s *Store) Summary() Summary {
+func (s *Store) Summary() Summary { return s.SummaryScoped(true, nil) }
+
+// SummaryScoped counts the devices in a scope per status.
+func (s *Store) SummaryScoped(all bool, ids map[int64]bool) Summary {
 	now := s.opts.Now()
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	sum := Summary{Total: len(s.devices)}
-	for _, e := range s.devices {
+	var sum Summary
+	for id, e := range s.devices {
+		if !all && !ids[id] {
+			continue
+		}
+		sum.Total++
 		switch s.status(&e.dev, now) {
 		case StatusMoving:
 			sum.Moving++

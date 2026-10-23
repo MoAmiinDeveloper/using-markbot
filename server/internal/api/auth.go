@@ -79,6 +79,14 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 			writeError(w, http.StatusUnauthorized, "invalid or expired token")
 			return
 		}
+		// The role comes from the live user record, so demotions and
+		// deactivations take effect immediately.
+		role, ok := s.store.UserRole(p.UserID)
+		if !ok {
+			writeError(w, http.StatusUnauthorized, "user no longer exists or is deactivated")
+			return
+		}
+		p.Role = role
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ctxKey{}, p)))
 	})
 }
@@ -110,6 +118,10 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	u, err := s.store.Authenticate(r.Context(), req.Email, req.Password)
 	if errors.Is(err, store.ErrInvalidCredentials) {
 		writeError(w, http.StatusUnauthorized, err.Error())
+		return
+	}
+	if errors.Is(err, store.ErrUserInactive) {
+		writeError(w, http.StatusForbidden, err.Error())
 		return
 	}
 	if err != nil {

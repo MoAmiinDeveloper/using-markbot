@@ -24,10 +24,12 @@ import (
 	"github.com/moamiindeveloper/fleet/server/internal/commands"
 	"github.com/moamiindeveloper/fleet/server/internal/events"
 	"github.com/moamiindeveloper/fleet/server/internal/gateway"
+	"github.com/moamiindeveloper/fleet/server/internal/geocode"
 	"github.com/moamiindeveloper/fleet/server/internal/hub"
 	"github.com/moamiindeveloper/fleet/server/internal/notify"
 	"github.com/moamiindeveloper/fleet/server/internal/protocol/teltonika"
 	"github.com/moamiindeveloper/fleet/server/internal/store"
+	"github.com/moamiindeveloper/fleet/server/internal/upkeep"
 )
 
 type config struct {
@@ -45,6 +47,8 @@ type config struct {
 	LogFormat     string
 	TelegramAPI   string
 	VAPIDSubject  string
+	Geocoder      string
+	GeocoderURL   string
 }
 
 func loadConfig() (config, error) {
@@ -60,6 +64,8 @@ func loadConfig() (config, error) {
 		LogFormat:     strings.ToLower(env("LOG_FORMAT", "text")),
 		TelegramAPI:   env("TELEGRAM_API_URL", notify.DefaultTelegramAPIURL),
 		VAPIDSubject:  env("VAPID_SUBJECT", notify.DefaultVAPIDSubject),
+		Geocoder:      strings.ToLower(env("GEOCODER", "nominatim")),
+		GeocoderURL:   env("GEOCODER_URL", geocode.DefaultURL),
 	}
 	var err error
 	if c.AutoRegister, err = strconv.ParseBool(env("AUTO_REGISTER", "true")); err != nil {
@@ -73,6 +79,9 @@ func loadConfig() (config, error) {
 	}
 	if c.LogFormat != "text" && c.LogFormat != "json" {
 		return c, errors.New("LOG_FORMAT must be text or json")
+	}
+	if c.Geocoder != "nominatim" && c.Geocoder != "off" {
+		return c, errors.New("GEOCODER must be nominatim or off")
 	}
 	if !strings.HasPrefix(c.VAPIDSubject, "mailto:") && !strings.HasPrefix(c.VAPIDSubject, "https://") {
 		return c, errors.New("VAPID_SUBJECT must be a mailto: or https:// URL")
@@ -149,6 +158,12 @@ func run(cfg config, log *slog.Logger) error {
 	}
 	st.SetHooks(store.Hooks{Positions: engine.Process, Connected: cmds.DeviceConnected})
 
+	geo, err := geocode.New(st, geocode.Options{Provider: cfg.Geocoder, URL: cfg.GeocoderURL,
+		Logger: log.With("component", "geocode")})
+	if err != nil {
+		return err
+	}
+
 	secret := []byte(cfg.JWTSecret)
 	if len(secret) == 0 {
 		secret = make([]byte, 32)
@@ -165,6 +180,7 @@ func run(cfg config, log *slog.Logger) error {
 			WebDir:      cfg.WebDir,
 			Notifier:    notifier,
 			Commands:    cmds,
+			Geocoder:    geo,
 			Logger:      log.With("component", "api"),
 		}),
 		ReadHeaderTimeout: 10 * time.Second,
@@ -175,9 +191,15 @@ func run(cfg config, log *slog.Logger) error {
 	defer cancel(nil)
 
 	go st.Run(ctx)
-	bgDone := make(chan struct{}, 2)
+	bgDone := make(chan struct{}, 3)
+	go func() { geo.Run(ctx); bgDone <- struct{}{} }()
 	go func() { notifier.Run(ctx); bgDone <- struct{}{} }()
 	go func() { cmds.Run(ctx); bgDone <- struct{}{} }()
+	upkeepDone := make(chan struct{})
+	go func() {
+		defer close(upkeepDone)
+		upkeep.New(st, engine, log.With("component", "upkeep")).Run(ctx)
+	}()
 
 	gw := gateway.New(st, log, gateway.Listener{Protocol: tel, TCPAddr: cfg.TeltonikaAddr, UDPAddr: cfg.TeltonikaAddr})
 	gwDone := make(chan struct{})
@@ -208,6 +230,8 @@ func run(cfg config, log *slog.Logger) error {
 	<-gwDone
 	<-bgDone
 	<-bgDone
+	<-bgDone
+	<-upkeepDone
 
 	if errors.Is(cause, context.Canceled) { // signal
 		return nil

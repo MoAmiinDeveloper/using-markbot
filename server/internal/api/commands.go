@@ -13,9 +13,12 @@ const (
 )
 
 func (s *Server) handleCreateCommand(w http.ResponseWriter, r *http.Request) {
-	id, err := deviceID(r)
-	if err != nil {
-		s.fail(w, r, err)
+	if !canManage(r) {
+		writeError(w, http.StatusForbidden, "viewers cannot send commands")
+		return
+	}
+	id, ok := s.visibleDevice(w, r)
+	if !ok {
 		return
 	}
 	var req struct {
@@ -36,14 +39,11 @@ func (s *Server) handleCreateCommand(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleListCommands(w http.ResponseWriter, r *http.Request) {
-	id, err := deviceID(r)
-	if err == nil {
-		_, err = s.store.Device(id)
-	}
-	if err != nil {
-		s.fail(w, r, err)
+	id, ok := s.visibleDevice(w, r)
+	if !ok {
 		return
 	}
+	var err error
 	limit := defaultCommandLimit
 	if v := r.URL.Query().Get("limit"); v != "" {
 		if limit, err = strconv.Atoi(v); err != nil || limit <= 0 {

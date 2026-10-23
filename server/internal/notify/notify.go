@@ -196,6 +196,9 @@ func (s *Service) deliver(ctx context.Context, j job) {
 	msg := telegramText(j.ev, j.deviceName)
 	payload := pushPayload(j.ev, j.deviceName)
 	for _, rc := range rcpts {
+		if !s.st.CanSeeDevice(rc.UserID, j.ev.DeviceID) {
+			continue // outside the user's groups, or deactivated
+		}
 		ch, ok := rc.Events[j.ev.Type]
 		if !ok {
 			continue // not a user-notifiable type (e.g. commandResult)
@@ -335,6 +338,18 @@ func typeTitle(t string) string {
 		return "Alarm"
 	case store.EventCommandResult:
 		return "Command result"
+	case store.EventHarshAcceleration:
+		return "Harsh acceleration"
+	case store.EventHarshBraking:
+		return "Harsh braking"
+	case store.EventHarshCornering:
+		return "Harsh cornering"
+	case store.EventIdle:
+		return "Idling"
+	case store.EventMaintenanceDue:
+		return "Maintenance due"
+	case store.EventDocumentExpiry:
+		return "Document expiry"
 	}
 	return t
 }

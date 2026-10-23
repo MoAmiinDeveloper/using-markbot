@@ -20,11 +20,19 @@ type Message struct {
 	Data any    `json:"data,omitempty"` // nil for notification-only messages
 }
 
+// DeviceScoped is implemented by payloads that belong to one device
+// (positions, devices, events, commands). Such messages are only delivered
+// to clients whose filter allows that device; other messages go to everyone.
+type DeviceScoped interface {
+	ScopeDeviceID() int64
+}
+
 // Client is one subscriber. Read frames from C; when C is closed the client
 // was dropped (too slow) or the hub shut down.
 type Client struct {
-	C  <-chan []byte
-	ch chan []byte
+	C     <-chan []byte
+	ch    chan []byte
+	allow func(deviceID int64) bool // nil = everything
 }
 
 // Hub is an in-memory publish/subscribe broker. The zero value is not usable;
@@ -49,11 +57,16 @@ func New(buffer int, log *slog.Logger) *Hub {
 	return &Hub{log: log, buffer: buffer, clients: make(map[*Client]struct{})}
 }
 
-// Subscribe registers a new client. After Close it returns a client whose
-// channel is already closed.
-func (h *Hub) Subscribe() *Client {
+// Subscribe registers a new client that receives every message. After Close
+// it returns a client whose channel is already closed.
+func (h *Hub) Subscribe() *Client { return h.SubscribeFiltered(nil) }
+
+// SubscribeFiltered registers a client that only receives device-scoped
+// messages for devices allow accepts. allow runs on the publishing goroutine
+// with the hub lock held, so it must be fast and must not call into the hub.
+func (h *Hub) SubscribeFiltered(allow func(deviceID int64) bool) *Client {
 	ch := make(chan []byte, h.buffer)
-	c := &Client{C: ch, ch: ch}
+	c := &Client{C: ch, ch: ch, allow: allow}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.closed {
@@ -78,9 +91,17 @@ func (h *Hub) Publish(msgType string, data any) {
 		h.log.Error("hub: encode message", "type", msgType, "err", err)
 		return
 	}
+	scoped, isScoped := data.(DeviceScoped)
+	var deviceID int64
+	if isScoped {
+		deviceID = scoped.ScopeDeviceID()
+	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for c := range h.clients {
+		if isScoped && c.allow != nil && !c.allow(deviceID) {
+			continue
+		}
 		select {
 		case c.ch <- frame:
 		default:

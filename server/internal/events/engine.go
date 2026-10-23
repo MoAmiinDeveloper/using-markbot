@@ -59,6 +59,9 @@ type state struct {
 	overActive  bool           // speed is above the limit
 	overFired   bool           // event already raised for this interval
 	overMax     float64        // highest speed in the current interval
+	idleSince   time.Time      // start of the current idle period (ignition on, not moving)
+	idleActive  bool           // in an idle period
+	idleFired   bool           // idle event already raised for this period
 }
 
 // New returns an engine; notify may be nil.
@@ -121,9 +124,10 @@ func (e *Engine) processDevice(ctx context.Context, id int64, ps []domain.Positi
 		s.initialised = true
 		if prev == nil {
 			// No history: the first fix is the baseline. It only raises
-			// alarms, which are momentary rather than a state change.
+			// alarms and harsh-driving events, which are momentary rather
+			// than a state change.
 			for _, ev := range evaluate(&dev, cfg, fences, s, &ps[0]) {
-				if ev.Type == store.EventAlarm {
+				if ev.Type == store.EventAlarm || isHarsh(ev.Type) {
 					evs = append(evs, ev)
 				}
 			}
@@ -132,6 +136,9 @@ func (e *Engine) processDevice(ctx context.Context, id int64, ps []domain.Positi
 			evaluate(&dev, cfg, fences, s, prev) // already evaluated before the restart
 			if s.overActive {
 				s.overFired = true // assume it was reported before the restart
+			}
+			if s.idleActive {
+				s.idleFired = true
 			}
 		}
 		e.Emit(ctx, dev.Name, evs...)
@@ -237,11 +244,57 @@ func evaluate(dev *store.Device, cfg store.Settings, fences []store.Geofence, s 
 		}
 	}
 
+	// Idling: ignition on and not moving for idleAlertMinutes, once per period.
+	on, known := p.Attributes[domain.AttrIgnition].(bool)
+	if known && on && p.Speed <= store.MovingSpeed {
+		if !s.idleActive {
+			s.idleActive, s.idleFired, s.idleSince = true, false, p.DeviceTime
+		}
+	} else {
+		s.idleActive, s.idleFired = false, false
+	}
+	if s.idleActive && !s.idleFired && cfg.IdleAlertMinutes > 0 {
+		if d := p.DeviceTime.Sub(s.idleSince); d >= time.Duration(cfg.IdleAlertMinutes)*time.Minute {
+			s.idleFired = true
+			minutes := int(d / time.Minute)
+			newEvent(store.EventIdle, fmt.Sprintf("%s is idling for %d min", dev.Name, minutes),
+				map[string]any{"minutes": minutes})
+		}
+	}
+
+	// Harsh driving (Teltonika green driving, Traccar hard* alarms).
+	if kind, ok := p.Attributes[domain.AttrHarsh].(string); ok {
+		if typ := harshType(kind); typ != "" {
+			attrs := map[string]any{"speed": round1(p.Speed)}
+			if v, ok := p.Attributes[domain.AttrHarshValue].(float64); ok {
+				attrs["value"] = v
+			}
+			newEvent(typ, fmt.Sprintf("%s harsh %s at %.0f km/h", dev.Name, kind, p.Speed), attrs)
+		}
+	}
+
 	// Device alarms.
 	if alarm, ok := p.Attributes[domain.AttrAlarm].(string); ok && alarm != "" {
 		newEvent(store.EventAlarm, fmt.Sprintf("%s alarm: %s", dev.Name, AlarmLabel(alarm)), map[string]any{"alarm": alarm})
 	}
 	return evs
+}
+
+// harshType maps a domain.AttrHarsh value to its event type ("" if unknown).
+func harshType(kind string) string {
+	switch kind {
+	case "acceleration":
+		return store.EventHarshAcceleration
+	case "braking":
+		return store.EventHarshBraking
+	case "cornering":
+		return store.EventHarshCornering
+	}
+	return ""
+}
+
+func isHarsh(typ string) bool {
+	return typ == store.EventHarshAcceleration || typ == store.EventHarshBraking || typ == store.EventHarshCornering
 }
 
 func round1(v float64) float64 { return float64(int64(v*10+0.5)) / 10 }

@@ -14,6 +14,7 @@ import (
 const (
 	DefaultSpeedLimit           = 100 // km/h
 	DefaultOverspeedMinDuration = 20  // seconds
+	DefaultCurrency             = "USD"
 )
 
 // Settings are the global, admin-editable settings plus server-generated
@@ -26,6 +27,17 @@ type Settings struct {
 	TraccarToken         string  `json:"traccarToken"`
 	VAPIDPublicKey       string  `json:"vapidPublicKey"`
 	VAPIDPrivateKey      string  `json:"vapidPrivateKey"`
+
+	// Phase 3.
+	Currency         string `json:"currency"`         // ISO 4217 code for expenses
+	IdleAlertMinutes int    `json:"idleAlertMinutes"` // 0 = no idle events
+	HarshScoring     bool   `json:"harshScoring"`     // harsh events count in driver scores
+}
+
+// defaultSettings are the settings before anything was saved.
+func defaultSettings() Settings {
+	return Settings{SpeedLimit: DefaultSpeedLimit, OverspeedMinDuration: DefaultOverspeedMinDuration,
+		Currency: DefaultCurrency, HarshScoring: true}
 }
 
 // RandomToken returns n random bytes, hex encoded.
@@ -57,13 +69,16 @@ func (s *Store) loadSettings(ctx context.Context) error {
 	if err := rows.Err(); err != nil {
 		return err
 	}
-	st := Settings{SpeedLimit: DefaultSpeedLimit, OverspeedMinDuration: DefaultOverspeedMinDuration}
+	st := defaultSettings()
 	if len(kv) > 0 {
 		// Round-trip through an object so each key decodes into its field.
 		obj, _ := json.Marshal(kv)
 		if err := json.Unmarshal(obj, &st); err != nil {
 			return fmt.Errorf("decode settings: %w", err)
 		}
+	}
+	if st.Currency == "" {
+		st.Currency = DefaultCurrency
 	}
 	s.settingsMu.Lock()
 	s.settings = st

@@ -168,7 +168,8 @@ func TestTelegramLinkAndNotify(t *testing.T) {
 	t.Cleanup(func() { cancel(); <-done })
 	go func() { s.Run(ctx); close(done) }()
 
-	u, err := st.CreateUser(ctx, "driver@fleet.local", "D", "pw", store.RoleUser)
+	// Admin: sees every device (non-admins only get alerts for their groups' devices).
+	u, err := st.CreateUser(ctx, "driver@fleet.local", "D", "pw", store.RoleAdmin)
 	if err != nil {
 		t.Fatal(err)
 	}
