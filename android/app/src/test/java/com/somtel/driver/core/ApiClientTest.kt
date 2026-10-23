@@ -156,6 +156,7 @@ class ApiClientTest {
     private class MemPrefs : SyncPrefs {
         override var updatesSince: String? = null
         override var knownJobIds: Set<Long> = emptySet()
+        override var driverId: Long? = null
     }
 
     @Test
@@ -194,7 +195,8 @@ class ApiClientTest {
         val r = engine.runOnce()
         assertEquals(SyncOutcome.DONE, r.outcome)
         assertEquals(1, r.sent)
-        assertEquals("item locked", repo.syncProblem.value)
+        assertEquals("item locked", repo.syncProblem.value?.message)
+        assertEquals(ErrorKind.CONFLICT, repo.syncProblem.value?.kind)
         assertTrue(queue.snapshot().isEmpty())
         assertEquals(JobStatus.ACCEPTED, repo.job(101)!!.status)
         assertFalse(repo.job(101)!!.checklist[0].done)
@@ -211,5 +213,75 @@ class ApiClientTest {
         repo.clearAll()
         assertTrue(repo.jobs.value.isEmpty())
         assertNull(prefs.updatesSince)
+        assertNull(prefs.driverId)
+    }
+
+    @Test
+    fun reassignedOrUnassignedJobsAreDroppedWithTheirQueue() = runTest {
+        val queue = ActionQueue(InMemoryTextStorage())
+        val prefs = MemPrefs()
+        val repo = JobRepository(api, queue, JobStore(InMemoryTextStorage()), prefs, scope, {})
+        val second = Fixtures.JOB_JSON.replace("\"id\": 101", "\"id\": 102")
+        server.enqueue(json("[${Fixtures.JOB_JSON},$second]"))
+        server.enqueue(json("[]"))
+        repo.refresh()
+        repo.setDriverId(2)
+        assertEquals(setOf(101L, 102L), repo.jobs.value.map { it.id }.toSet())
+
+        val dir = Files.createTempDirectory("q").toFile()
+        val photo = File(dir, "p.jpg").apply { writeText("x") }
+        repo.addNote(101, "on my way")
+        repo.addUpload(101, photo, "photo", "image/jpeg")
+        repo.addNote(102, "keep me")
+
+        // 101 reassigned to driver 7, 102 moved back to unassigned (driverId cleared); new job 103 is someone else's.
+        val reassigned = Fixtures.JOB_JSON.replace("\"driverId\": 2", "\"driverId\": 7")
+        val unassigned = second.replace("\"driverId\": 2", "\"driverId\": null").replace("\"status\": \"assigned\"", "\"status\": \"unassigned\"")
+        val foreignNew = Fixtures.JOB_JSON.replace("\"id\": 101", "\"id\": 103").replace("\"driverId\": 2", "\"driverId\": 9")
+        server.enqueue(json("""{"jobs":[$reassigned,$unassigned,$foreignNew],"now":"2026-10-24T08:05:00Z"}"""))
+        val fresh = repo.pollUpdates()
+        assertTrue(fresh.isEmpty())
+        assertTrue(repo.jobs.value.isEmpty())
+        assertTrue(queue.snapshot().isEmpty())
+        assertFalse(photo.exists())
+        dir.deleteRecursively()
+    }
+
+    @Test
+    fun rejectedUploadIsDroppedWithFriendlyKind() = runTest {
+        val queue = ActionQueue(InMemoryTextStorage())
+        val repo = JobRepository(api, queue, JobStore(InMemoryTextStorage()), MemPrefs(), scope, {})
+        val dir = Files.createTempDirectory("u").toFile()
+        val file = File(dir, "x.jpg").apply { writeText("not an image") }
+        repo.addUpload(101, file, "photo", "image/jpeg")
+        server.enqueue(json("""{"error":"unsupported file type"}""", 415))
+        val engine = SyncEngine(queue, ApiActionExecutor(api), repo::onActionSynced, repo::onActionDropped)
+        val r = engine.runOnce()
+        assertEquals(SyncOutcome.DONE, r.outcome)
+        assertEquals(415, r.dropped.single().code)
+        assertEquals(ErrorKind.UNSUPPORTED_TYPE, repo.syncProblem.value?.kind)
+        assertTrue(repo.syncProblem.value!!.upload)
+        assertTrue(queue.snapshot().isEmpty())
+        assertFalse(file.exists())
+
+        val big = File(dir, "y.jpg").apply { writeText("big") }
+        repo.addUpload(101, big, "photo", "image/jpeg")
+        server.enqueue(json("""{"error":"file too large"}""", 413))
+        assertEquals(SyncOutcome.DONE, engine.runOnce().outcome)
+        assertEquals(ErrorKind.TOO_LARGE, repo.syncProblem.value?.kind)
+        dir.deleteRecursively()
+    }
+
+    @Test
+    fun locationResponseIsParsed() = runTest {
+        server.enqueue(json("""{"stored":true,"deviceId":12}"""))
+        val r = api.postLocation(com.somtel.driver.core.model.LocationRequest(2.04, 45.31, speed = 30.0))
+        assertTrue(r!!.stored)
+        assertEquals(12L, r.deviceId)
+        server.enqueue(json("""{"stored":false,"deviceId":null}"""))
+        assertFalse(api.postLocation(com.somtel.driver.core.model.LocationRequest(2.04, 45.31))!!.stored)
+        val req = server.takeRequest()
+        assertEquals("/api/v1/driver/location", req.path)
+        assertTrue(req.body.readUtf8().contains("\"speed\":30.0"))
     }
 }

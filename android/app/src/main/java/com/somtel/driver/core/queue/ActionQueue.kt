@@ -37,6 +37,15 @@ class ActionQueue(
 
     fun clear() = mutate { emptyList() }
 
+    /** Removes every queued action of [jobId] and returns them (e.g. the job was reassigned). */
+    fun removeForJob(jobId: Long): List<PendingAction> {
+        synchronized(lock) {
+            val removed = state.value.filter { it.jobId == jobId }
+            if (removed.isNotEmpty()) mutate { list -> list.filterNot { it.jobId == jobId } }
+            return removed
+        }
+    }
+
     fun countForJob(jobId: Long): Int = state.value.count { it.jobId == jobId }
 
     private fun mutate(change: (List<PendingAction>) -> List<PendingAction>) {

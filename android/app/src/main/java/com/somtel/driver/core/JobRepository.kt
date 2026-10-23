@@ -22,7 +22,13 @@ import java.util.UUID
 interface SyncPrefs {
     var updatesSince: String?
     var knownJobIds: Set<Long>
+
+    /** The logged-in driver's `Driver.id` (from `/driver/me`), used to drop jobs reassigned to someone else. */
+    var driverId: Long?
 }
+
+/** A queued change the server rejected permanently, shown once in the UI. */
+data class SyncProblem(val message: String, val kind: ErrorKind?, val upload: Boolean)
 
 /**
  * Single source of truth for jobs: last server state (persisted) + pending offline actions applied
@@ -39,12 +45,12 @@ class JobRepository(
 ) {
     private val serverJobs = MutableStateFlow(store.load().associateBy { it.id })
     private val dirtyJobIds = mutableSetOf<Long>()
-    private val _syncProblem = MutableStateFlow<String?>(null)
+    private val _syncProblem = MutableStateFlow<SyncProblem?>(null)
 
     val pendingActions: StateFlow<List<PendingAction>> = queue.actions
 
     /** Last action the server rejected permanently (shown once in the UI). */
-    val syncProblem: StateFlow<String?> = _syncProblem.asStateFlow()
+    val syncProblem: StateFlow<SyncProblem?> = _syncProblem.asStateFlow()
 
     val jobs: StateFlow<List<Job>> = combine(serverJobs, queue.actions) { map, actions -> merge(map, actions) }
         .stateIn(scope, SharingStarted.Eagerly, merge(serverJobs.value, queue.snapshot()))
@@ -56,14 +62,34 @@ class JobRepository(
 
     fun hasJobInProgress(): Boolean = jobs.value.any { JobRules.isOnJob(it.status) }
 
+    /**
+     * Whether [job] is still assigned to this driver. The server also sends a job to its previous driver
+     * after a reassignment (or after it was moved back to `unassigned`, which clears `driverId`).
+     */
+    fun belongsToMe(job: Job): Boolean {
+        val owner = job.driverId ?: return false
+        val me = prefs.driverId ?: return true
+        return owner == me
+    }
+
+    /** Records the driver id from `/driver/me` and drops cached jobs that are no longer ours. */
+    fun setDriverId(id: Long?) {
+        if (id == null || prefs.driverId == id) return
+        prefs.driverId = id
+        val foreign = serverJobs.value.values.filterNot { belongsToMe(it) }
+        if (foreign.isNotEmpty()) upsert(foreign)
+    }
+
     // ---- Server reads -------------------------------------------------------------------------
 
     /** Full reload of active + history jobs (pull-to-refresh, app start). */
     suspend fun refresh() {
         val active = api.jobs("active")
         val history = api.jobs("history")
-        val all = (active + history).associateBy { it.id }
+        val all = (active + history).filter { belongsToMe(it) }.associateBy { it.id }
+        val gone = serverJobs.value.keys - all.keys
         serverJobs.value = all
+        gone.forEach { discardQueued(it) }
         store.save(all.values)
         prefs.knownJobIds = prefs.knownJobIds + all.keys
         if (prefs.updatesSince == null) {
@@ -78,6 +104,7 @@ class JobRepository(
             if (e.code == 404 || e.code == 403) {
                 serverJobs.update { it - id }
                 store.save(serverJobs.value.values)
+                discardQueued(id)
             } else {
                 throw e
             }
@@ -94,14 +121,23 @@ class JobRepository(
         val response = api.updates(since)
         if (response.jobs.isNotEmpty()) upsert(response.jobs)
         response.now?.let { prefs.updatesSince = it }
-        val detected = NewJobDetector.detect(prefs.knownJobIds, response.jobs)
+        val detected = NewJobDetector.detect(prefs.knownJobIds, response.jobs.filter { belongsToMe(it) })
         prefs.knownJobIds = detected.known
         return detected.newJobs
     }
 
+    /** Merges server copies; jobs no longer assigned to this driver are removed with their queued actions. */
     private fun upsert(jobs: List<Job>) {
-        serverJobs.update { current -> current + jobs.associateBy { it.id } }
+        val (mine, foreign) = jobs.partition { belongsToMe(it) }
+        val foreignIds = foreign.map { it.id }.toSet()
+        serverJobs.update { current -> current - foreignIds + mine.associateBy { it.id } }
         store.save(serverJobs.value.values)
+        foreignIds.forEach { discardQueued(it) }
+    }
+
+    /** Drops queued actions (and pending upload files) of a job we no longer own. */
+    private fun discardQueued(jobId: Long) {
+        queue.removeForJob(jobId).filterIsInstance<PendingAction.Upload>().forEach { File(it.filePath).delete() }
     }
 
     // ---- Sync callbacks -----------------------------------------------------------------------
@@ -112,7 +148,12 @@ class JobRepository(
 
     fun onActionDropped(dropped: DroppedAction) {
         synchronized(dirtyJobIds) { dirtyJobIds += dropped.action.jobId }
-        _syncProblem.value = dropped.message
+        _syncProblem.value = SyncProblem(
+            message = dropped.message,
+            kind = dropped.code?.let { ApiErrors.kindFor(it) },
+            upload = dropped.action is PendingAction.Upload,
+        )
+        if (dropped.action is PendingAction.Upload) File(dropped.action.filePath).delete()
     }
 
     fun clearSyncProblem() {
@@ -165,6 +206,7 @@ class JobRepository(
         store.save(emptyList())
         prefs.updatesSince = null
         prefs.knownJobIds = emptySet()
+        prefs.driverId = null
         _syncProblem.value = null
     }
 }

@@ -17,6 +17,7 @@ import com.somtel.driver.R
 import com.somtel.driver.core.ApiErrors
 import com.somtel.driver.core.ApiException
 import com.somtel.driver.core.ErrorKind
+import com.somtel.driver.core.SyncProblem
 import com.somtel.driver.core.model.JobPriority
 import com.somtel.driver.core.model.JobStatus
 import com.somtel.driver.core.model.StopStatus
@@ -90,6 +91,15 @@ fun stopStatusLabel(status: String): String = when (status) {
     else -> status
 }
 
+/** Friendly text for a change the server rejected (uploads get specific 413 / 415 messages). */
+@Composable
+fun syncProblemText(problem: SyncProblem): String = when {
+    problem.upload && problem.kind == ErrorKind.TOO_LARGE -> stringResource(R.string.error_upload_too_large)
+    problem.upload && problem.kind == ErrorKind.UNSUPPORTED_TYPE -> stringResource(R.string.error_upload_type)
+    problem.upload -> stringResource(R.string.error_upload_rejected, problem.message)
+    else -> stringResource(R.string.sync_rejected, problem.message)
+}
+
 /** User-facing text for an error: the server's `{"error"}` message when present, else a generic one. */
 @Composable
 fun errorMessage(t: Throwable): String {
@@ -103,6 +113,7 @@ fun errorMessage(t: Throwable): String {
         ErrorKind.CONFLICT -> stringResource(R.string.error_conflict)
         ErrorKind.VALIDATION -> stringResource(R.string.error_validation)
         ErrorKind.TOO_LARGE -> stringResource(R.string.error_too_large)
+        ErrorKind.UNSUPPORTED_TYPE -> stringResource(R.string.error_unsupported_type)
         ErrorKind.SERVER -> stringResource(R.string.error_server)
         ErrorKind.UNKNOWN -> stringResource(R.string.error_unknown)
     }

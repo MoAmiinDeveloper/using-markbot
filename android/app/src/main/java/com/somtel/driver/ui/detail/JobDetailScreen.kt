@@ -93,6 +93,8 @@ import com.somtel.driver.ui.common.PendingSyncPill
 import com.somtel.driver.ui.common.PriorityPill
 import com.somtel.driver.ui.common.StatusPill
 import com.somtel.driver.ui.common.errorMessage
+import com.somtel.driver.ui.common.syncProblemText
+import com.somtel.driver.core.SyncProblem
 import com.somtel.driver.ui.common.stopStatusLabel
 import com.somtel.driver.ui.theme.SomtelColors
 import com.somtel.driver.ui.theme.appBarColor
@@ -111,6 +113,7 @@ fun JobDetailScreen(container: AppContainer, jobId: Long, onBack: () -> Unit, on
     val refreshing by vm.refreshing.collectAsStateWithLifecycle()
     val error by vm.error.collectAsStateWithLifecycle()
     val photoFailed by vm.photoFailed.collectAsStateWithLifecycle()
+    val syncProblem by vm.syncProblem.collectAsStateWithLifecycle()
     val serverUrl = container.sessionStore.current?.serverUrl.orEmpty()
 
     val context = LocalContext.current
@@ -181,6 +184,7 @@ fun JobDetailScreen(container: AppContainer, jobId: Long, onBack: () -> Unit, on
                     pending = pending,
                     error = error,
                     photoFailed = photoFailed,
+                    syncProblem = syncProblem,
                     cameraMissing = cameraMissing,
                     serverUrl = serverUrl,
                     vm = vm,
@@ -215,6 +219,7 @@ private fun JobContent(
     pending: List<PendingAction>,
     error: Throwable?,
     photoFailed: Boolean,
+    syncProblem: SyncProblem?,
     cameraMissing: Boolean,
     serverUrl: String,
     vm: JobDetailViewModel,
@@ -231,11 +236,13 @@ private fun JobContent(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         val err = error
-        if (err != null || photoFailed || cameraMissing) {
+        val problem = syncProblem
+        if (err != null || photoFailed || cameraMissing || problem != null) {
             item {
                 val msg = when {
                     cameraMissing -> stringResource(R.string.error_no_camera)
                     photoFailed -> stringResource(R.string.error_photo_failed)
+                    problem != null -> syncProblemText(problem)
                     err != null -> errorMessage(err)
                     else -> ""
                 }

@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.somtel.driver.AppContainer
 import com.somtel.driver.core.JobRules
+import com.somtel.driver.core.SyncProblem
 import com.somtel.driver.core.model.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -39,7 +40,7 @@ class JobsViewModel(private val container: AppContainer) : ViewModel() {
     private val errorState = MutableStateFlow<Throwable?>(null)
     val error: StateFlow<Throwable?> = errorState.asStateFlow()
 
-    val syncProblem: StateFlow<String?> = repo.syncProblem
+    val syncProblem: StateFlow<SyncProblem?> = repo.syncProblem
 
     init {
         refresh()

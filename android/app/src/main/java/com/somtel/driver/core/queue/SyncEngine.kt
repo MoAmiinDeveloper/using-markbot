@@ -25,7 +25,8 @@ enum class SyncOutcome {
     UNAUTHORIZED,
 }
 
-data class DroppedAction(val action: PendingAction, val message: String)
+/** An action the server rejected permanently; [code] is the HTTP status (null for local failures). */
+data class DroppedAction(val action: PendingAction, val message: String, val code: Int? = null)
 
 data class SyncResult(val outcome: SyncOutcome, val sent: Int, val dropped: List<DroppedAction>)
 
@@ -60,7 +61,7 @@ class SyncEngine(
                     RetryPolicy.RETRY -> return SyncResult(SyncOutcome.RETRY, sent, dropped)
                     RetryPolicy.UNAUTHORIZED -> return SyncResult(SyncOutcome.UNAUTHORIZED, sent, dropped)
                     RetryPolicy.DROP -> {
-                        dropped += drop(next, e.message ?: "HTTP ${e.code}")
+                        dropped += drop(next, e.message ?: "HTTP ${e.code}", e.code)
                     }
                 }
             } catch (e: IOException) {
@@ -72,9 +73,9 @@ class SyncEngine(
         }
     }
 
-    private fun drop(action: PendingAction, message: String): DroppedAction {
+    private fun drop(action: PendingAction, message: String, code: Int? = null): DroppedAction {
         queue.remove(action.id)
-        val d = DroppedAction(action, message)
+        val d = DroppedAction(action, message, code)
         onDropped(d)
         return d
     }

@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.somtel.driver.AppContainer
 import com.somtel.driver.core.DriverAction
 import com.somtel.driver.core.JobRules
+import com.somtel.driver.core.SyncProblem
 import com.somtel.driver.core.model.AttachmentKind
 import com.somtel.driver.core.model.Job
 import com.somtel.driver.core.model.JobStatus
@@ -39,6 +40,9 @@ class JobDetailViewModel(private val container: AppContainer, val jobId: Long) :
     private val errorState = MutableStateFlow<Throwable?>(null)
     val error: StateFlow<Throwable?> = errorState.asStateFlow()
 
+    /** Server rejections of queued changes (e.g. an upload refused with 413/415). */
+    val syncProblem: StateFlow<SyncProblem?> = repo.syncProblem
+
     private val photoFailedState = MutableStateFlow(false)
     val photoFailed: StateFlow<Boolean> = photoFailedState.asStateFlow()
 
@@ -65,6 +69,7 @@ class JobDetailViewModel(private val container: AppContainer, val jobId: Long) :
     fun dismissError() {
         errorState.value = null
         photoFailedState.value = false
+        repo.clearSyncProblem()
     }
 
     fun perform(action: DriverAction) {

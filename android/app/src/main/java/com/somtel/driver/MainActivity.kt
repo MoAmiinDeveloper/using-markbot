@@ -31,6 +31,7 @@ class MainActivity : ComponentActivity() {
         val container = appContainer
         if (container.sessionStore.current != null) {
             container.requestSync()
+            container.appScope.launch { container.loadDriverMe() }
             if (container.settings.shareLocation) LocationService.start(this)
         }
 

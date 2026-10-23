@@ -5,7 +5,7 @@ import com.somtel.driver.core.model.ErrorBody
 import java.io.IOException
 
 /** Category of failure, mapped to a localised message in the UI. */
-enum class ErrorKind { NETWORK, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, VALIDATION, TOO_LARGE, SERVER, UNKNOWN }
+enum class ErrorKind { NETWORK, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, VALIDATION, TOO_LARGE, UNSUPPORTED_TYPE, SERVER, UNKNOWN }
 
 /** What the offline queue should do with an action that failed with an HTTP status. */
 enum class RetryPolicy { RETRY, DROP, UNAUTHORIZED }
@@ -23,6 +23,7 @@ object ApiErrors {
         code == 404 -> ErrorKind.NOT_FOUND
         code == 409 -> ErrorKind.CONFLICT
         code == 413 -> ErrorKind.TOO_LARGE
+        code == 415 -> ErrorKind.UNSUPPORTED_TYPE
         code == 400 || code == 422 -> ErrorKind.VALIDATION
         code in 500..599 -> ErrorKind.SERVER
         else -> ErrorKind.UNKNOWN

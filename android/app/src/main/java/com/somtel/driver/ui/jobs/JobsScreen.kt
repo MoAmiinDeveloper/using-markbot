@@ -65,6 +65,7 @@ import com.somtel.driver.ui.common.PendingSyncPill
 import com.somtel.driver.ui.common.PriorityPill
 import com.somtel.driver.ui.common.StatusPill
 import com.somtel.driver.ui.common.errorMessage
+import com.somtel.driver.ui.common.syncProblemText
 import com.somtel.driver.ui.theme.SomtelColors
 import com.somtel.driver.ui.theme.appBarColor
 import com.somtel.driver.ui.theme.lateColor
@@ -134,7 +135,7 @@ fun JobsScreen(container: AppContainer, onOpenJob: (Long) -> Unit, onOpenProfile
             }
             syncProblem?.let { problem ->
                 Banner(
-                    text = stringResource(R.string.sync_rejected, problem),
+                    text = syncProblemText(problem),
                     background = MaterialTheme.colorScheme.errorContainer,
                     content = MaterialTheme.colorScheme.onErrorContainer,
                     action = stringResource(R.string.action_dismiss),

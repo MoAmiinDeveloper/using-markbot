@@ -67,6 +67,7 @@ object JobRules {
 
     fun isLate(job: Job, now: Instant): Boolean {
         if (isTerminal(job.status)) return false
+        if (job.late) return true
         val due = TimeFormat.parse(job.dueBy) ?: return false
         return now.isAfter(due)
     }

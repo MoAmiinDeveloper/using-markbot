@@ -133,7 +133,11 @@ class LocationService : Service() {
                 time = TimeFormat.format(Instant.ofEpochMilli(loc.time)),
             )
             try {
-                container.api.postLocation(body)
+                val result = container.api.postLocation(body)
+                if (result != null && !result.stored) {
+                    // The server tracks this driver through the vehicle's tracker instead.
+                    Log.d(TAG, "Phone location not stored (vehicle tracking in use)")
+                }
             } catch (e: Exception) {
                 Log.d(TAG, "Location upload failed: ${e.message}")
             }

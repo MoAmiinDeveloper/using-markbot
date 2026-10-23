@@ -23,6 +23,10 @@
     <string name="error_too_large">The file is too large (max 10 MB).</string>
     <string name="error_server">Server error. Please try again later.</string>
     <string name="error_unknown">Something went wrong.</string>
+    <string name="error_unsupported_type">This file type is not supported.</string>
+    <string name="error_upload_too_large">A photo could not be uploaded because it is larger than 10 MB. Please take it again.</string>
+    <string name="error_upload_type">A file could not be uploaded: only JPEG, PNG, WebP and PDF are accepted.</string>
+    <string name="error_upload_rejected">An upload was rejected by the server: %1$s</string>
     <string name="error_no_camera">No camera app is available on this device.</string>
     <string name="error_photo_failed">The photo could not be processed. Please try again.</string>
 

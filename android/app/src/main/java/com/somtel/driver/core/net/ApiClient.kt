@@ -9,6 +9,7 @@ import com.somtel.driver.core.model.ChecklistRequest
 import com.somtel.driver.core.model.DriverMe
 import com.somtel.driver.core.model.Job
 import com.somtel.driver.core.model.LocationRequest
+import com.somtel.driver.core.model.LocationResponse
 import com.somtel.driver.core.model.LoginRequest
 import com.somtel.driver.core.model.LoginResponse
 import com.somtel.driver.core.model.NoteRequest
@@ -137,9 +138,8 @@ class ApiClient(
         return decodeOrNull(Attachment.serializer(), execute(request))
     }
 
-    suspend fun postLocation(body: LocationRequest) {
-        post("/driver/location", LocationRequest.serializer(), body)
-    }
+    suspend fun postLocation(body: LocationRequest): LocationResponse? =
+        decodeOrNull(LocationResponse.serializer(), post("/driver/location", LocationRequest.serializer(), body))
 
     // ---- Plumbing -----------------------------------------------------------------------------
 

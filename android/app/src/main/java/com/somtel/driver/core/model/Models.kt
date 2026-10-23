@@ -100,6 +100,8 @@ data class Job(
     val updatedAt: String? = null,
     val completedAt: String? = null,
     val routeId: Long? = null,
+    /** Server-computed: dueBy passed and not completed/failed/cancelled. */
+    val late: Boolean = false,
 )
 
 @Serializable
@@ -107,6 +109,10 @@ data class UpdatesResponse(
     val jobs: List<Job> = emptyList(),
     val now: String? = null,
 )
+
+/** `POST /driver/location` → `{"stored": true, "deviceId": 12}` (stored=false when the vehicle tracks the driver). */
+@Serializable
+data class LocationResponse(val stored: Boolean = false, val deviceId: Long? = null)
 
 @Serializable
 data class ErrorBody(val error: String? = null)

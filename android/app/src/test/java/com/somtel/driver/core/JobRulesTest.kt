@@ -61,6 +61,9 @@ class JobRulesTest {
         assertTrue(JobRules.isLate(job, Instant.parse("2026-10-24T10:00:00Z")))
         assertFalse(JobRules.isLate(job.copy(status = JobStatus.COMPLETED), Instant.parse("2026-10-24T10:00:00Z")))
         assertFalse(JobRules.isLate(job.copy(dueBy = null), Instant.parse("2030-01-01T00:00:00Z")))
+        // Server-computed flag wins (e.g. phone clock behind).
+        assertTrue(JobRules.isLate(job.copy(late = true), Instant.parse("2026-10-24T09:00:00Z")))
+        assertFalse(JobRules.isLate(job.copy(late = true, status = "completed"), Instant.parse("2026-10-24T09:00:00Z")))
     }
 
     @Test

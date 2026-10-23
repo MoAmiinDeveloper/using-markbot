@@ -45,6 +45,10 @@ class AppSettings(context: Context) : SyncPrefs {
         get() = prefs.getStringSet(KEY_KNOWN, emptySet()).orEmpty().mapNotNull { it.toLongOrNull() }.toSet()
         set(value) = prefs.edit().putStringSet(KEY_KNOWN, value.map { it.toString() }.toSet()).apply()
 
+    override var driverId: Long?
+        get() = prefs.getLong(KEY_DRIVER_ID, -1L).takeIf { it > 0 }
+        set(value) = prefs.edit().putLong(KEY_DRIVER_ID, value ?: -1L).apply()
+
     private companion object {
         const val KEY_SERVER = "server_url"
         const val KEY_EMAIL = "email"
@@ -53,5 +57,6 @@ class AppSettings(context: Context) : SyncPrefs {
         const val KEY_NOTIF_ASKED = "notif_asked"
         const val KEY_SINCE = "updates_since"
         const val KEY_KNOWN = "known_job_ids"
+        const val KEY_DRIVER_ID = "driver_id"
     }
 }

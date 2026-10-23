@@ -76,8 +76,12 @@ class AppContainer(context: Context) {
         return result
     }
 
+    /** Loads `/driver/me`; remembers the driver id so jobs reassigned to someone else are dropped. */
     suspend fun loadDriverMe(): DriverMe? = try {
-        api.driverMe().also { driverMeState.value = it }
+        api.driverMe().also {
+            driverMeState.value = it
+            repository.setDriverId(it.driver?.id)
+        }
     } catch (_: Exception) {
         driverMeState.value
     }
@@ -94,11 +98,11 @@ class AppContainer(context: Context) {
         WorkScheduler.schedulePeriodicUpdates(appContext)
         requestSync()
         appScope.launch {
+            loadDriverMe()
             try {
                 repository.refresh()
             } catch (_: Exception) {
             }
-            loadDriverMe()
         }
     }
 
