@@ -41,6 +41,8 @@ type vehicle struct {
 	ignition, motion bool
 	odometer, trip   float64 // m
 	altitude         float64
+
+	sensors *sensorSim // nil without -sensors
 }
 
 func newVehicle(rng *rand.Rand, lat, lng float64, now time.Time) *vehicle {
@@ -95,6 +97,9 @@ func (v *vehicle) step(now time.Time, dt time.Duration) (event uint16) {
 		v.lat, v.lng = offset(v.lat, v.lng, v.heading*math.Pi/180, move)
 		v.odometer += move
 		v.trip += move
+		if v.sensors != nil {
+			v.sensors.drive(move)
+		}
 		v.altitude = max(0, v.altitude+v.rng.NormFloat64()*0.5)
 
 		if dist-move < 10 {
@@ -102,6 +107,9 @@ func (v *vehicle) step(now time.Time, dt time.Duration) (event uint16) {
 		}
 	}
 	v.motion = v.speed > 0.5
+	if v.sensors != nil {
+		v.sensors.step(now, sec, v.state != driving, v.state == parked, v.ignition)
+	}
 	switch {
 	case ign != v.ignition:
 		return 239
@@ -162,6 +170,22 @@ func (v *vehicle) record(now time.Time, event uint16) teltonika.Record {
 	if event != 0 {
 		priority = 1
 	}
+	io := []teltonika.IOElement{
+		teltonika.NewIO(239, 1, b2i(v.ignition)),
+		teltonika.NewIO(240, 1, b2i(v.motion)),
+		teltonika.NewIO(21, 1, uint64(3+v.rng.IntN(3))), // GSM signal
+		teltonika.NewIO(69, 1, 1),                       // GNSS on with fix
+		teltonika.NewIO(200, 1, 0),                      // sleep mode off
+		teltonika.NewIO(66, 2, uint64(power)),
+		teltonika.NewIO(67, 2, uint64(4_000+v.rng.IntN(200))),
+		teltonika.NewIO(181, 2, uint64(8+v.rng.IntN(8))), // PDOP x10
+		teltonika.NewIO(182, 2, uint64(6+v.rng.IntN(6))), // HDOP x10
+		teltonika.NewIO(16, 4, uint64(v.odometer)),
+		teltonika.NewIO(199, 4, uint64(v.trip)),
+	}
+	if v.sensors != nil {
+		io = append(io, v.sensors.io(v.state == driving)...)
+	}
 	return teltonika.Record{
 		Time:       now.UTC().Truncate(time.Millisecond),
 		Priority:   priority,
@@ -172,19 +196,7 @@ func (v *vehicle) record(now time.Time, event uint16) teltonika.Record {
 		Satellites: uint8(sats),
 		Speed:      uint16(math.Round(min(v.speed*3.6, 110))),
 		EventID:    event,
-		IO: []teltonika.IOElement{
-			teltonika.NewIO(239, 1, b2i(v.ignition)),
-			teltonika.NewIO(240, 1, b2i(v.motion)),
-			teltonika.NewIO(21, 1, uint64(3+v.rng.IntN(3))), // GSM signal
-			teltonika.NewIO(69, 1, 1),                       // GNSS on with fix
-			teltonika.NewIO(200, 1, 0),                      // sleep mode off
-			teltonika.NewIO(66, 2, uint64(power)),
-			teltonika.NewIO(67, 2, uint64(4_000+v.rng.IntN(200))),
-			teltonika.NewIO(181, 2, uint64(8+v.rng.IntN(8))), // PDOP x10
-			teltonika.NewIO(182, 2, uint64(6+v.rng.IntN(6))), // HDOP x10
-			teltonika.NewIO(16, 4, uint64(v.odometer)),
-			teltonika.NewIO(199, 4, uint64(v.trip)),
-		},
+		IO:         io,
 	}
 }
 

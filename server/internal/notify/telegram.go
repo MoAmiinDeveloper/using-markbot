@@ -6,8 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -45,12 +48,17 @@ func (c *telegramClient) call(ctx context.Context, token, method string, body, o
 	if err != nil {
 		return err
 	}
+	return c.do(ctx, token, method, "application/json", bytes.NewReader(b), out)
+}
+
+// do posts a request body to a Bot API method and decodes the result.
+func (c *telegramClient) do(ctx context.Context, token, method, contentType string, body io.Reader, out any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		strings.TrimSuffix(c.baseURL, "/")+"/bot"+token+"/"+method, bytes.NewReader(b))
+		strings.TrimSuffix(c.baseURL, "/")+"/bot"+token+"/"+method, body)
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", contentType)
 	resp, err := c.http.Do(req)
 	if err != nil {
 		// The URL contains the token; never let it reach the logs.
@@ -114,6 +122,30 @@ func (c *telegramClient) getUpdates(ctx context.Context, token string, offset in
 		"allowed_updates": []string{"message"},
 	}, &ups)
 	return ups, err
+}
+
+// sendDocument uploads a file (multipart/form-data) to a chat.
+func (c *telegramClient) sendDocument(ctx context.Context, token string, chatID int64, name string, data []byte, caption string) error {
+	var body bytes.Buffer
+	mw := multipart.NewWriter(&body)
+	_ = mw.WriteField("chat_id", strconv.FormatInt(chatID, 10))
+	if caption != "" {
+		if len([]rune(caption)) > 1024 {
+			caption = string([]rune(caption)[:1024])
+		}
+		_ = mw.WriteField("caption", caption)
+	}
+	fw, err := mw.CreateFormFile("document", name)
+	if err != nil {
+		return err
+	}
+	if _, err := fw.Write(data); err != nil {
+		return err
+	}
+	if err := mw.Close(); err != nil {
+		return err
+	}
+	return c.do(ctx, token, "sendDocument", mw.FormDataContentType(), &body, nil)
 }
 
 func (c *telegramClient) sendMessage(ctx context.Context, token string, chatID int64, html string) error {

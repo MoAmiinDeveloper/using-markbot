@@ -23,6 +23,7 @@ type Driver struct {
 	DeviceID      *int64    `json:"deviceId"`      // manually assigned vehicle
 	Notes         string    `json:"notes"`
 	CreatedAt     time.Time `json:"createdAt"`
+	UserID        *int64    `json:"userId"` // driver-app login (role driver), Phase 4a
 }
 
 // DriverInput is the body of POST /drivers.
@@ -36,11 +37,11 @@ type DriverInput struct {
 	Notes         string  `json:"notes"`
 }
 
-const driverColumns = `id, name, phone, license_number, to_char(license_expiry, 'YYYY-MM-DD'), tag, device_id, notes, created_at`
+const driverColumns = `id, name, phone, license_number, to_char(license_expiry, 'YYYY-MM-DD'), tag, device_id, notes, created_at, user_id`
 
 func scanDriver(row pgx.Row) (Driver, error) {
 	var d Driver
-	err := row.Scan(&d.ID, &d.Name, &d.Phone, &d.LicenseNumber, &d.LicenseExpiry, &d.Tag, &d.DeviceID, &d.Notes, &d.CreatedAt)
+	err := row.Scan(&d.ID, &d.Name, &d.Phone, &d.LicenseNumber, &d.LicenseExpiry, &d.Tag, &d.DeviceID, &d.Notes, &d.CreatedAt, &d.UserID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return d, ErrNotFound
 	}

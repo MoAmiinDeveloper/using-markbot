@@ -28,6 +28,7 @@ type config struct {
 	codec    byte
 	lat, lng float64
 	imeiBase uint64
+	sensors  bool // add fuel (io9) and temperature (io72) sensor IO
 }
 
 // stats are fleet-wide counters, logged periodically.
@@ -49,6 +50,9 @@ func main() {
 	flag.Float64Var(&cfg.lat, "lat", 25.2048, "center latitude")
 	flag.Float64Var(&cfg.lng, "lng", 55.2708, "center longitude")
 	flag.StringVar(&imeiBase, "imei-base", "356307040000000", "IMEI of device 0; device i uses base+i")
+	flag.BoolVar(&cfg.sensors, "sensors", false,
+		"add sensor IO: io72 temperature (0.1 °C, occasional excursions above 8 °C) and io9 fuel probe in mV "+
+			"(0–4500 mV = 0–120 L: consumption, refuels, rare drains while parked)")
 	flag.BoolVar(&verbose, "v", false, "debug logging")
 	flag.Parse()
 

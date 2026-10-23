@@ -193,6 +193,10 @@ func (s *Server) handlePositions(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
+	if v := r.URL.Query().Get("sensors"); v == "1" || v == "true" { // automation module
+		writeJSON(w, http.StatusOK, s.positionsWithSensors(id, ps))
+		return
+	}
 	writeJSON(w, http.StatusOK, ps)
 }
 

@@ -32,12 +32,38 @@ type Settings struct {
 	Currency         string `json:"currency"`         // ISO 4217 code for expenses
 	IdleAlertMinutes int    `json:"idleAlertMinutes"` // 0 = no idle events
 	HarshScoring     bool   `json:"harshScoring"`     // harsh events count in driver scores
+
+	// Phase 4a (dispatch module).
+	DriverAppTracking bool `json:"driverAppTracking"` // store driver-app phone GPS even when the driver has a vehicle
+
+	// Phase 4a (automation module): outgoing email.
+	SMTP SMTPSettings `json:"smtp"`
 }
+
+// SMTP TLS modes.
+const (
+	SMTPStartTLS = "starttls" // plain connection upgraded with STARTTLS (port 587)
+	SMTPTLS      = "tls"      // implicit TLS (port 465)
+	SMTPNone     = "none"     // no encryption (local relays only)
+)
+
+// SMTPSettings configure outgoing email (scheduled reports, email alerts).
+type SMTPSettings struct {
+	Host     string `json:"host"`
+	Port     int    `json:"port"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+	From     string `json:"from"` // "Name <addr>" or "addr"
+	TLS      string `json:"tls"`  // starttls | tls | none
+}
+
+// Configured reports whether email can be sent.
+func (c SMTPSettings) Configured() bool { return c.Host != "" && c.From != "" }
 
 // defaultSettings are the settings before anything was saved.
 func defaultSettings() Settings {
 	return Settings{SpeedLimit: DefaultSpeedLimit, OverspeedMinDuration: DefaultOverspeedMinDuration,
-		Currency: DefaultCurrency, HarshScoring: true}
+		Currency: DefaultCurrency, HarshScoring: true, SMTP: SMTPSettings{Port: 587, TLS: SMTPStartTLS}}
 }
 
 // RandomToken returns n random bytes, hex encoded.
@@ -79,6 +105,12 @@ func (s *Store) loadSettings(ctx context.Context) error {
 	}
 	if st.Currency == "" {
 		st.Currency = DefaultCurrency
+	}
+	if st.SMTP.Port == 0 {
+		st.SMTP.Port = 587
+	}
+	if st.SMTP.TLS == "" {
+		st.SMTP.TLS = SMTPStartTLS
 	}
 	s.settingsMu.Lock()
 	s.settings = st

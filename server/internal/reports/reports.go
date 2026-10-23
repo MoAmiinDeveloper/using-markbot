@@ -90,6 +90,8 @@ var Types = []struct{ Type, Title string }{
 	{"expenses", "Expenses"},
 	{"maintenance", "Maintenance"},
 	{"systemLog", "System log"},
+	{"fuel", "Fuel"},
+	{"temperature", "Temperature"},
 }
 
 // Title returns the title of a report type ("" if unknown).
@@ -178,6 +180,10 @@ func (e *Engine) Run(ctx context.Context, req Request) (*Report, error) {
 		err = e.maintenance(ctx, req, rep)
 	case "systemLog":
 		err = e.systemLog(ctx, req, rep)
+	case "fuel":
+		err = e.fuel(ctx, req, rep)
+	case "temperature":
+		err = e.temperature(ctx, req, rep)
 	}
 	if err != nil {
 		return nil, err

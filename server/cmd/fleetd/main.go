@@ -22,12 +22,16 @@ import (
 
 	"github.com/moamiindeveloper/fleet/server/internal/api"
 	"github.com/moamiindeveloper/fleet/server/internal/commands"
+	"github.com/moamiindeveloper/fleet/server/internal/dispatch"
 	"github.com/moamiindeveloper/fleet/server/internal/events"
 	"github.com/moamiindeveloper/fleet/server/internal/gateway"
 	"github.com/moamiindeveloper/fleet/server/internal/geocode"
 	"github.com/moamiindeveloper/fleet/server/internal/hub"
 	"github.com/moamiindeveloper/fleet/server/internal/notify"
 	"github.com/moamiindeveloper/fleet/server/internal/protocol/teltonika"
+	"github.com/moamiindeveloper/fleet/server/internal/reports"
+	"github.com/moamiindeveloper/fleet/server/internal/schedule"
+	"github.com/moamiindeveloper/fleet/server/internal/sensors"
 	"github.com/moamiindeveloper/fleet/server/internal/store"
 	"github.com/moamiindeveloper/fleet/server/internal/upkeep"
 )
@@ -49,6 +53,7 @@ type config struct {
 	VAPIDSubject  string
 	Geocoder      string
 	GeocoderURL   string
+	DataDir       string
 }
 
 func loadConfig() (config, error) {
@@ -66,6 +71,7 @@ func loadConfig() (config, error) {
 		VAPIDSubject:  env("VAPID_SUBJECT", notify.DefaultVAPIDSubject),
 		Geocoder:      strings.ToLower(env("GEOCODER", "nominatim")),
 		GeocoderURL:   env("GEOCODER_URL", geocode.DefaultURL),
+		DataDir:       env("DATA_DIR", "data"),
 	}
 	var err error
 	if c.AutoRegister, err = strconv.ParseBool(env("AUTO_REGISTER", "true")); err != nil {
@@ -152,6 +158,23 @@ func run(cfg config, log *slog.Logger) error {
 		return err
 	}
 	engine := events.New(st, notifier, log.With("component", "events"))
+	// Automation module: sensor values + fuel/threshold events.
+	sensorSvc, err := sensors.New(ctx, st, log.With("component", "sensors"))
+	if err != nil {
+		return err
+	}
+	engine.AddRule(sensorSvc)
+	// Dispatch module: job stop tracking and route deviation rules.
+	if err := os.MkdirAll(cfg.DataDir, 0o750); err != nil {
+		return fmt.Errorf("DATA_DIR: %w", err)
+	}
+	dispatchSvc := dispatch.New(st, dispatch.Options{DataDir: cfg.DataDir, Emitter: engine,
+		Logger: log.With("component", "dispatch")})
+	if err := dispatchSvc.Refresh(ctx); err != nil {
+		return err
+	}
+	engine.AddRule(dispatchSvc.StopRule())
+	engine.AddRule(dispatchSvc.RouteRule())
 	cmds, err := commands.New(ctx, st, tel, engine, log.With("component", "commands"))
 	if err != nil {
 		return err
@@ -163,6 +186,9 @@ func run(cfg config, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+
+	reportEngine := reports.New(st, geo, log.With("component", "reports"))
+	scheduler := schedule.New(st, reportEngine, notifier, log.With("component", "schedule"))
 
 	secret := []byte(cfg.JWTSecret)
 	if len(secret) == 0 {
@@ -181,6 +207,9 @@ func run(cfg config, log *slog.Logger) error {
 			Notifier:    notifier,
 			Commands:    cmds,
 			Geocoder:    geo,
+			Dispatch:    dispatchSvc,
+			Reports:     reportEngine,
+			Scheduler:   scheduler,
 			Logger:      log.With("component", "api"),
 		}),
 		ReadHeaderTimeout: 10 * time.Second,
@@ -195,6 +224,11 @@ func run(cfg config, log *slog.Logger) error {
 	go func() { geo.Run(ctx); bgDone <- struct{}{} }()
 	go func() { notifier.Run(ctx); bgDone <- struct{}{} }()
 	go func() { cmds.Run(ctx); bgDone <- struct{}{} }()
+	automationDone := make(chan struct{}, 2)
+	go func() { sensorSvc.Run(ctx); automationDone <- struct{}{} }()
+	go func() { scheduler.Run(ctx); automationDone <- struct{}{} }()
+	dispatchDone := make(chan struct{})
+	go func() { defer close(dispatchDone); dispatchSvc.Run(ctx) }()
 	upkeepDone := make(chan struct{})
 	go func() {
 		defer close(upkeepDone)
@@ -232,6 +266,9 @@ func run(cfg config, log *slog.Logger) error {
 	<-bgDone
 	<-bgDone
 	<-upkeepDone
+	<-dispatchDone
+	<-automationDone
+	<-automationDone
 
 	if errors.Is(cause, context.Canceled) { // signal
 		return nil

@@ -19,6 +19,7 @@ const (
 	RoleAdmin   = "admin"   // everything, all devices
 	RoleManager = "manager" // manages the devices of their groups
 	RoleViewer  = "viewer"  // read-only, devices of their groups
+	RoleDriver  = "driver"  // driver app only (/me, /driver/*), linked to a Driver
 
 	// RoleUser is the Phase 1–2 non-admin role; such accounts were migrated
 	// to managers.
@@ -28,7 +29,7 @@ const (
 )
 
 // Roles lists the valid roles.
-var Roles = []string{RoleAdmin, RoleManager, RoleViewer}
+var Roles = []string{RoleAdmin, RoleManager, RoleViewer, RoleDriver}
 
 // ErrUserInactive is returned by Authenticate for deactivated accounts.
 var ErrUserInactive = errors.New("this account is deactivated")

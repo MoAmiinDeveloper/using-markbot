@@ -11,15 +11,17 @@ import (
 
 // settingsView is the Settings contract; secrets are hidden as documented.
 type settingsView struct {
-	SpeedLimit           float64 `json:"speedLimit"`
-	OverspeedMinDuration int     `json:"overspeedMinDuration"`
-	TelegramBotToken     string  `json:"telegramBotToken"` // write-only, always ""
-	TelegramConfigured   bool    `json:"telegramConfigured"`
-	TelegramBotUsername  string  `json:"telegramBotUsername"`
-	TraccarToken         string  `json:"traccarToken"` // admins only
-	Currency             string  `json:"currency"`
-	IdleAlertMinutes     int     `json:"idleAlertMinutes"`
-	HarshScoring         bool    `json:"harshScoring"`
+	SpeedLimit           float64  `json:"speedLimit"`
+	OverspeedMinDuration int      `json:"overspeedMinDuration"`
+	TelegramBotToken     string   `json:"telegramBotToken"` // write-only, always ""
+	TelegramConfigured   bool     `json:"telegramConfigured"`
+	TelegramBotUsername  string   `json:"telegramBotUsername"`
+	TraccarToken         string   `json:"traccarToken"` // admins only
+	Currency             string   `json:"currency"`
+	IdleAlertMinutes     int      `json:"idleAlertMinutes"`
+	HarshScoring         bool     `json:"harshScoring"`
+	DriverAppTracking    bool     `json:"driverAppTracking"`
+	SMTP                 smtpView `json:"smtp"` // automation module
 }
 
 func viewSettings(cfg store.Settings, admin bool) settingsView {
@@ -31,6 +33,8 @@ func viewSettings(cfg store.Settings, admin bool) settingsView {
 		Currency:             cfg.Currency,
 		IdleAlertMinutes:     cfg.IdleAlertMinutes,
 		HarshScoring:         cfg.HarshScoring,
+		DriverAppTracking:    cfg.DriverAppTracking,
+		SMTP:                 viewSMTP(cfg.SMTP, admin),
 	}
 	if admin {
 		v.TraccarToken = cfg.TraccarToken
@@ -59,14 +63,21 @@ func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handlePatchSettings(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		SpeedLimit           *float64 `json:"speedLimit"`
-		OverspeedMinDuration *float64 `json:"overspeedMinDuration"`
-		TelegramBotToken     *string  `json:"telegramBotToken"`
-		Currency             *string  `json:"currency"`
-		IdleAlertMinutes     *float64 `json:"idleAlertMinutes"`
-		HarshScoring         *bool    `json:"harshScoring"`
+		SpeedLimit           *float64   `json:"speedLimit"`
+		OverspeedMinDuration *float64   `json:"overspeedMinDuration"`
+		TelegramBotToken     *string    `json:"telegramBotToken"`
+		Currency             *string    `json:"currency"`
+		IdleAlertMinutes     *float64   `json:"idleAlertMinutes"`
+		HarshScoring         *bool      `json:"harshScoring"`
+		DriverAppTracking    *bool      `json:"driverAppTracking"`
+		SMTP                 *smtpPatch `json:"smtp"` // automation module
 	}
 	if err := decodeJSON(w, r, &req); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	smtpCfg, err := req.SMTP.apply(s.store.Settings().SMTP)
+	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
@@ -113,6 +124,12 @@ func (s *Server) handlePatchSettings(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.HarshScoring != nil {
 			cfg.HarshScoring = *req.HarshScoring
+		}
+		if req.DriverAppTracking != nil {
+			cfg.DriverAppTracking = *req.DriverAppTracking
+		}
+		if req.SMTP != nil {
+			cfg.SMTP = smtpCfg
 		}
 		return nil
 	})

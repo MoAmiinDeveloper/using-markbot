@@ -281,7 +281,7 @@ func TestNotificationsAPI(t *testing.T) {
 		Events         map[string]store.Channels `json:"events"`
 	}
 	e.do("GET", "/api/v1/me/notifications", e.token, nil, 200, &prefs)
-	if prefs.TelegramLinked || prefs.Push.Enabled || len(prefs.Events) != len(store.NotifyEventTypes) || len(prefs.Events) != 12 ||
+	if prefs.TelegramLinked || prefs.Push.Enabled || len(prefs.Events) != len(store.NotifyEventTypes) || len(prefs.Events) != 22 || // 12 + 10 Phase 4a types
 		prefs.Events["alarm"] != (store.Channels{InApp: true, Telegram: true, Push: true}) {
 		t.Fatalf("defaults %+v", prefs)
 	}

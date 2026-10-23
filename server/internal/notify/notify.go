@@ -9,6 +9,7 @@ package notify
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"html"
@@ -20,6 +21,7 @@ import (
 
 	webpush "github.com/SherClockHolmes/webpush-go"
 
+	"github.com/moamiindeveloper/fleet/server/internal/mail"
 	"github.com/moamiindeveloper/fleet/server/internal/store"
 )
 
@@ -56,6 +58,8 @@ type Options struct {
 	QueueSize  int
 	Workers    int
 	Logger     *slog.Logger
+	// MailTLSConfig overrides the SMTP TLS client configuration (tests).
+	MailTLSConfig *tls.Config
 }
 
 type job struct {
@@ -211,7 +215,74 @@ func (s *Service) deliver(ctx context.Context, j job) {
 				_ = s.sendPush(ctx, sub, payload)
 			}
 		}
+		if ch.Email && rc.Email != "" && s.st.Settings().SMTP.Configured() {
+			if err := s.SendEmail(ctx, mail.Message{To: []string{rc.Email},
+				Subject: typeTitle(j.ev.Type) + " · " + j.deviceName, Text: emailText(j.ev, j.deviceName)}); err != nil {
+				s.log.Warn("notify: email send failed", "user", rc.UserID, "err", err)
+			}
+		}
 	}
+}
+
+// ErrEmailNotConfigured is returned when SMTP settings are missing.
+var ErrEmailNotConfigured = errors.New("email (SMTP) is not configured")
+
+// MailConfig converts the SMTP settings.
+func MailConfig(c store.SMTPSettings) mail.Config {
+	return mail.Config{Host: c.Host, Port: c.Port, Username: c.Username, Password: c.Password, From: c.From, TLS: c.TLS}
+}
+
+// SendEmail sends a message with the current SMTP settings.
+func (s *Service) SendEmail(ctx context.Context, msg mail.Message) error {
+	cfg := s.st.Settings().SMTP
+	if !cfg.Configured() {
+		return ErrEmailNotConfigured
+	}
+	mc := MailConfig(cfg)
+	mc.TLSConfig = s.opts.MailTLSConfig
+	return mail.Send(ctx, mc, msg)
+}
+
+// SendTelegramDocument sends a file to the chat linked to a user.
+func (s *Service) SendTelegramDocument(ctx context.Context, userID int64, name string, data []byte, caption string) error {
+	token := s.st.Settings().TelegramBotToken
+	if token == "" {
+		return ErrTelegramNotConfigured
+	}
+	chat, err := s.st.TelegramChat(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if chat == 0 {
+		return ErrTelegramNotLinked
+	}
+	sctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+	err = s.tg.sendDocument(sctx, token, chat, name, data, caption)
+	if err != nil {
+		s.log.Warn("notify: telegram document failed", "chat", chat, "err", err)
+		if code := telegramCode(err); code == http.StatusForbidden {
+			if users, uerr := s.st.UnlinkTelegramChat(ctx, chat); uerr == nil && len(users) > 0 {
+				s.st.Publish(EventNotifications, nil)
+			}
+		}
+	}
+	return err
+}
+
+// ErrTelegramNotLinked is returned when a user has no linked chat.
+var ErrTelegramNotLinked = errors.New("no Telegram chat is linked")
+
+// emailText renders an event as a plain-text email body.
+func emailText(ev store.Event, deviceName string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s · %s\n\n%s\n\nTime: %s UTC\n", typeTitle(ev.Type), deviceName, ev.Message,
+		ev.Time.UTC().Format("2006-01-02 15:04:05"))
+	if ev.Lat != 0 || ev.Lng != 0 {
+		fmt.Fprintf(&b, "Location: https://www.google.com/maps?q=%.6f,%.6f\n", ev.Lat, ev.Lng)
+	}
+	b.WriteString("\n-- \nSomtel Fleet notification. Change your preferences under Notifications.\n")
+	return b.String()
 }
 
 // sendTelegram sends a message, unlinking chats that blocked the bot.
@@ -350,6 +421,26 @@ func typeTitle(t string) string {
 		return "Maintenance due"
 	case store.EventDocumentExpiry:
 		return "Document expiry"
+	case store.EventJobAssigned:
+		return "Job assigned"
+	case store.EventJobStatus:
+		return "Job status"
+	case store.EventJobStopArrived:
+		return "Job stop arrived"
+	case store.EventJobLate:
+		return "Job late"
+	case store.EventRouteDeviation:
+		return "Route deviation"
+	case store.EventRouteReturn:
+		return "Back on route"
+	case store.EventFuelDrain:
+		return "Fuel drain"
+	case store.EventRefuel:
+		return "Refuel"
+	case store.EventSensorHigh:
+		return "Sensor high"
+	case store.EventSensorLow:
+		return "Sensor low"
 	}
 	return t
 }

@@ -684,3 +684,152 @@ multiplier 0.1), `io201`/`io203` LLS fuel level, `io25`–`io28` BLE temperature
 ## New event types (all registered in NotificationPrefs by the automation module)
 `jobAssigned`, `jobStatus`, `jobStopArrived`, `jobLate`, `routeDeviation`, `routeReturn`,
 `fuelDrain`, `refuel`, `sensorHigh`, `sensorLow`.
+
+## Phase 4a implementation notes — dispatch module (clarifications, all additive)
+
+- **Driver role.** `driver` is a valid `User.role` everywhere (`/users` too), but driver logins are meant to be made
+  with `POST /drivers/{id}/account {email, password}` (admin/manager, driver must be visible): `201` + `User` when the
+  account is created, `200` when it already existed (email updated, password changed when given — this is how a
+  manager resets a driver's password). Duplicate email → `400`. `DELETE /drivers/{id}/account` → `204` (deletes the
+  login; `404` when the driver has none). `Driver.userId` links them. A driver account may only call `GET`/`PATCH /me`,
+  `/driver/*`, `GET /files/{id}` (files of its own jobs) and `/ws`; every other endpoint → `403
+  {"error":"not available for driver accounts"}` (unknown methods on existing paths may still answer `405`).
+  A driver's device scope is its assigned vehicle plus its driver-app phone device.
+- **`/driver/*` for staff.** Admins/managers with a linked driver use it as that driver; otherwise they pass
+  `?driverId=<id>` (a driver they can see). Without either, and for viewers → `403`.
+- **Job fields.** `Job` also has `"late": true|false` (dueBy passed and not completed/failed/cancelled).
+  `createdBy` is `null` when the creator was deleted. `Attachment` also has `jobId`, `contentType`, `size`, `userId`.
+  `reference` = `JOB-` + id zero-padded to 6 digits; `GET /jobs?q=` matches reference, title, customer name/phone and
+  description. `GET /jobs` also accepts `limit` (default 500, max 5000); `status` takes a comma-separated list; order is
+  `scheduledStart` (else `createdAt`) newest first.
+- **Validation.** `title` required (≤ 200), `priority` normal|high|urgent (default normal), ≥ 1 and ≤ 100 stops, stop
+  `lat`/`lng` required, `radius` 10–5000 m (default 150), stop `name` defaults to `Stop N`; ≤ 100 checklist items
+  (`text` required). Unknown/invisible `deviceId`/`driverId`/`routeId` → `400`.
+- **PATCH /jobs/{id}.** `stops`/`checklist` replace the lists: items with an `id` keep their state (status, times, done),
+  items without `id` are added, missing ones deleted. `status` in a PATCH → `400` (use `/status`). Changing `driverId`
+  on an unfinished job sets status `assigned` (or `unassigned` when cleared) and emits `jobAssigned`. Changing `dueBy`
+  re-arms `jobLate`.
+- **Status transitions** (`409` otherwise). Driver (`/driver/jobs/{id}/status`): assigned→accepted;
+  accepted→enRoute|arrived|failed; enRoute→arrived|inProgress|failed; arrived→inProgress|enRoute|completed|failed;
+  inProgress→completed|failed|enRoute (enRoute again = next stop). Drivers cannot complete while a `required`
+  checklist item is not done (`409`). Admin/manager (`/jobs/{id}/status`) may do all of the above plus:
+  unassigned→assigned (needs a driver, else `409`)|cancelled; assigned→unassigned|enRoute|cancelled;
+  accepted→assigned|unassigned|cancelled; enRoute→completed|cancelled; arrived|inProgress→cancelled;
+  failed|cancelled→assigned|unassigned (reopen). `completed` is final. Moving to `unassigned` clears the driver.
+  `reason` is stored as `failureReason` for failed/cancelled (cleared on reopen). Optional `lat`/`lng` go into the
+  timeline entry.
+- **Stops (driver).** `POST /driver/jobs/{id}/stops/{stopId}`: pending→arrived|completed|skipped, arrived→completed|skipped,
+  only while the job is accepted/enRoute/arrived/inProgress (`409` otherwise). Manual arrival also moves an
+  accepted/enRoute job to `arrived` and emits `jobStopArrived`. `checklist` accepts `{done: false}` too.
+  All driver mutation endpoints (status, stops, checklist, notes) return the updated `Job`; notes only go to the timeline.
+- **Automatic stop tracking.** Runs for jobs in assigned/accepted/enRoute/arrived/inProgress on the tracking device:
+  the job's vehicle, else the driver's assigned vehicle, else the driver's driver-app phone. A valid fix within `radius`
+  of a `pending` stop marks it `arrived` (`arrivedAt` = fix time; the job becomes `arrived` only from accepted/enRoute)
+  and emits `jobStopArrived` (attributes `{jobId, reference, status, title, stopId, stopName, auto: true}`). Departure is
+  recorded when a fix is farther than `radius + max(25 m, 20 % of radius)` (hysteresis); re-entering later changes
+  nothing. Automatic arrival does not emit an extra `jobStatus`.
+- **Job timeline kinds** also include `stopSkipped`, `updated` (manager edit), `late`. `data` holds `{from, status,
+  reason?, lat?, lng?, auto?}` for status, `{driverId, previousDriverId?}` for assigned, `{stopId, name, ...}` for stops,
+  `{itemId, text, done}`, `{attachmentId, kind, name, stopId}`, `{text}`.
+- **Events.** `jobAssigned` `{jobId, reference, status, title, driverId, driverName}`; `jobStatus` `{jobId, reference,
+  status, title, previousStatus, reason?}` for every status change made through the API (not for the assignment that
+  emits `jobAssigned`); `jobLate` `{jobId, reference, status, title, dueBy}` once per `dueBy` value (checked every
+  minute). Events need a vehicle: they are raised on the tracking device and skipped for jobs without one.
+  `routeDeviation` `{routeId, routeName, corridor, distance}`, `routeReturn` `{routeId, routeName, corridor,
+  maxDistance, seconds}`.
+- **Live updates.** `{"type":"job","data":Job}` goes to admins, to users who can see the job's vehicle (current or,
+  after a change, previous), to managers for jobs without a vehicle, and to the driver app of the job's current and
+  previous driver (a driver app must drop jobs whose `driverId` is no longer its own). Deleting a job publishes
+  `{"type":"jobDeleted","data":{"id":101}}` to the same audience. Route changes publish `{"type":"routes"}` (no data).
+  Driver sockets only receive `job`, `jobDeleted`, `position`/`device` of their own vehicle/phone and `deleted`.
+- **Uploads.** Multipart fields `file` (required, one per request), `kind` (default photo, or document for PDF),
+  `stopId` (optional, a stop of that job). The type is sniffed from the content (JPEG, PNG, WebP, PDF only, else `415`);
+  > 10 MB → `413`; empty file / bad fields → `400`. File names are reduced to a safe base name with the right
+  extension. Files are stored under `DATA_DIR/attachments/<jobId>/` (env `DATA_DIR`, default `./data`; Docker image
+  `/data`, cloud install `/var/lib/fleet`) and removed with the job. `GET /files/{id}` also accepts `?token=<jwt>` (for
+  `<img src>`; only on this path) and `?download=1` (attachment disposition); it sends `X-Content-Type-Options: nosniff`.
+  Users who cannot see the job get `404`.
+- **Driver app location.** `speed` is km/h, plus optional `altitude`; `time` must be within the last 7 days (≤ 5 min in
+  the future). Response `{"stored": true, "deviceId": 12}` or `{"stored": false, "deviceId": null}` (driver has a
+  vehicle and `driverAppTracking` is off). The pseudo device (`imei` `DRV<driverId>`, `protocol` `driverapp`,
+  `category` other, name `<driver> (phone)`) is created on first use regardless of `AUTO_REGISTER`, has no groups
+  (admins see it) and runs through the normal ingest (history, trips, events). `driverAppTracking` is in
+  `GET/PATCH /settings`.
+- **`/driver/jobs`.** `status=active` (default) = not completed/failed/cancelled; `status=history` = the 200 most
+  recent finished jobs. `/driver/updates` without `since` returns the active jobs; with `since` the jobs updated after
+  it, including jobs reassigned away from the driver. Use the returned `now` as the next `since` (duplicates possible).
+- **Routes.** `color` default `#ffd700`, `corridor` 10–10000 m (default 200), `minDeviationSeconds` 0–86400 (default 60),
+  `path` 2–10000 points; `Route` also has `updatedAt`. Viewers may `GET` routes too. Non-admins see routes without
+  devices and routes with at least one visible device (`deviceIds` narrowed); managers can only edit/delete routes whose
+  devices are all in their groups (`403` otherwise) and only assign visible devices (`400`). `from-trip` also accepts
+  `color`, `corridor`, `minDeviationSeconds`, `deviceIds` (default `[]`), period ≤ 31 days; too few positions → `400`.
+  A job's route is monitored for its tracking device while the job is accepted/enRoute/arrived/inProgress.
+  Deviation needs `minDeviationSeconds` continuously outside the corridor (by device time); one `routeDeviation` per
+  excursion, `routeReturn` only after a deviation fired. Deleting a route clears `routeId` on its jobs.
+
+## Phase 4a implementation notes — automation module (clarifications, all additive)
+
+- **Scheduled reports.** `reportType` = any type of `GET /reports` (incl. `fuel`, `temperature`). Defaults on `POST`:
+  `period` yesterday, `frequency` daily, `hour` 7, `weekday` 1, `monthDay` 1, `timezone` UTC, `format` pdf,
+  `enabled` true. `weekday` is 0 = Sunday … 6 = Saturday (7 is accepted as Sunday). `monthDay` 29–31 runs on the last
+  day of shorter months. Runs happen at `hour`:00 local time; an hour skipped by a DST change runs at the next hour.
+  At least one recipient (`telegramUserIds` or `emails`, ≤ 50 / ≤ 20) is required; emails are stored as bare
+  addresses, duplicates removed. `filters.deviceIds` must be visible to the caller, `filters.groupId` must exist
+  (`400` otherwise); devices deleted or no longer visible to the creator later are skipped silently.
+  `ReportSchedule` also has `createdBy` and `createdAt`. `PATCH` takes any subset (`filters` is replaced as a whole) and
+  recomputes `nextRunAt` from now. Admins see all schedules; managers see/edit/run only the ones they created (others →
+  `404`); viewers/drivers → `403`. `GET /report-schedules/{id}` is also available.
+  **Periods** (in the schedule's time zone, relative to the run time): `yesterday`, `today` (midnight → run time),
+  `thisWeek` (Monday → run time), `lastWeek` (Monday–Sunday), `thisMonth`, `lastMonth`.
+  **Catch-up:** schedules missed while the server was down run **once** at start-up, for the latest missed
+  occurrence; `nextRunAt` then moves to the next future occurrence. The due check runs every 30 s; runs are claimed
+  atomically in the database (safe with several instances).
+  **Run log:** `POST …/run` is synchronous and returns the run; `GET …/runs?limit=` (default 50, max 100, newest
+  first; the last 100 are kept) → `[{time, status, error, recipients, manual}]`; `recipients` lists successful
+  deliveries as `"telegram:<user email>"` / `"email:<address>"`. `status` is `error` when generation failed, any
+  recipient failed (`error` lists each failure, e.g. `telegram admin@x: no Telegram chat is linked`) or nothing was
+  delivered. A deleted/deactivated creator makes runs fail. Telegram users receive the file via `sendDocument` with
+  the caption `"<name>: <report title>, <period dates>"`; emails get one message per address with the same subject
+  and the export attached. A report delivered over Telegram is generated with the **creator's** scope regardless of
+  the recipient's own access.
+- **SMTP.** `GET /settings` → `smtp` (admins: all fields, password always `""`; others: only `port`, `tls`,
+  `configured`). `PATCH /settings {"smtp": {...}}` accepts any subset; `password` omitted/`null`/`""` keeps the stored
+  one, clearing `username` also clears the password. `from` must parse as an address (`"Name <addr>"` or `addr`) and
+  is required once `host` is set; `configured` = host and from set. Defaults: port 587, tls `starttls`.
+  `tls: starttls` requires the server to offer STARTTLS; `tls: tls` is implicit TLS (465); `none` is plain (AUTH PLAIN
+  is then sent unencrypted). Timeouts: 10 s connect, 60 s per message. `POST /settings/smtp/test {to}` (admin; `to`
+  defaults to the caller's address) → `200 {"sent": true, "to"}`, `400` bad address, `409` not configured, `502
+  {"error": "sending failed: …"}` with the server's reason.
+- **Email notifications.** `NotificationPrefs.events[*].email` (default false) sends a plain-text email to the user's
+  login address when SMTP is configured (subject `"<Event title> · <vehicle>"`). Same visibility rules as Telegram.
+- **New event types.** Defaults: `jobAssigned`, `jobLate`, `routeDeviation`, `fuelDrain`, `sensorHigh`, `sensorLow` →
+  inApp + telegram + push; `jobStatus`, `jobStopArrived`, `routeReturn`, `refuel` → inApp only; email off for all.
+- **Sensors.** `POST` defaults: `multiplier` 1, `offset` 0, `decimals` 1, `unit` by type (fuel `L`, temperature `°C`,
+  humidity `%`, voltage `V`, generic `""`), `smoothing` 5 for fuel / 1 otherwise (1–50), fuel thresholds 8 / 10 L
+  when omitted. `source` is an attribute key (`^[A-Za-z][A-Za-z0-9_]{0,63}$`). `calibration`: 0 or ≥ 2 points with
+  distinct raw values (sorted by raw on save, ≤ 200); values outside the table are clamped to the first/last value.
+  `decimals` 0–6, `min < max`, positive `tankCapacity`/thresholds. `PATCH` takes any subset (`null` clears nullable
+  fields); changing source/type/calibration/multiplier/offset resets the latest value and detector state. Sensors of
+  invisible devices answer `404`; `GET /sensors?deviceId=` of an invisible device → `404`. Viewers may `GET`.
+  Raw values: numbers, booleans (0/1) and numeric strings. Teltonika `io72`–`io75` and `io25`–`io28` are now decoded
+  as **signed** values (negative temperatures), keeping their `io<ID>` keys.
+- **Values.** Value = median of the last `smoothing` calibrated readings. `Device.sensors` lists every sensor of the
+  device (ordered by name), `value`/`time` `null` until the first reading, rounded to `decimals`; a `device` WebSocket
+  frame is published when a displayed value changes. Latest values and detector state are persisted (every 30 s and
+  on shutdown). `?sensors=1` on positions: `"sensors": {"<sensorId>": value}` per position (smoothing restarts at the
+  first returned position; sensors without a reading at that fix are omitted).
+- **Detection.** `sensorHigh`/`sensorLow` (any sensor type with `max`/`min`): once per excursion; re-armed after the
+  value returns inside by the hysteresis `max(2 % of |limit|, 5 × 10^-decimals)`. Attributes `{sensorId, sensorName,
+  value, limit, unit}`. `refuel`/`fuelDrain` (fuel sensors): the smoothed level is compared with the lowest (refuel)
+  / highest (drain) level of the last 30 min (a few readings taken while stopped are kept longer for devices reporting
+  rarely when parked); the change is reported once, when the level has stopped changing for 3 fixes or the vehicle
+  drives off. Drains are only detected while stopped (speed ≤ 3 km/h) or with the ignition off; slow consumption
+  never adds up within the window. Attributes `{sensorId, sensorName, liters, before, after}` for both (refuel has the
+  extra keys too). A device's very first fix only establishes the baseline.
+- **Reports.** `fuel`: one row per fuel sensor — `device, sensor, startLevel, endLevel, consumed, refuels,
+  refuelLiters, drains, drainLiters, distance (km, as in summary), consumption (L/100 km, null under 1 km)`;
+  `consumed = start − end + refuelled − drained` (≥ 0); totals. `temperature`: one row per temperature sensor —
+  `device, sensor, min, avg (mean of readings), max, lowLimit, highLimit, minutesOutOfRange, excursions, readings`
+  (each reading counts until the next, at most 30 min). Both recompute values from stored positions with the current
+  calibration, so they also cover data from before the sensor was created; extra row keys `deviceId`, `sensorId`.
+- **Env.** No new variables.

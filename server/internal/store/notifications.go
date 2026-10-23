@@ -17,14 +17,19 @@ const EventNotifications = "notifications"
 // NotifyEventTypes are the event types users can configure notifications for.
 var NotifyEventTypes = []string{EventGeofenceEnter, EventGeofenceExit, EventOverspeed, EventIgnitionOn,
 	EventIgnitionOff, EventAlarm, EventHarshAcceleration, EventHarshBraking, EventHarshCornering, EventIdle,
-	EventMaintenanceDue, EventDocumentExpiry}
+	EventMaintenanceDue, EventDocumentExpiry,
+	// Phase 4a.
+	EventJobAssigned, EventJobStatus, EventJobStopArrived, EventJobLate, EventRouteDeviation, EventRouteReturn,
+	EventFuelDrain, EventRefuel, EventSensorHigh, EventSensorLow}
 
 // DefaultChannels returns the channels used for an event type the user has
-// not configured: everything on, except Telegram and push for the frequent
-// driver-behaviour and idle events.
+// not configured: in-app always; Telegram and push except for the frequent
+// driver-behaviour, idle and informational dispatch/sensor events; email
+// is opt-in (off by default) for every type.
 func DefaultChannels(eventType string) Channels {
 	switch eventType {
-	case EventHarshAcceleration, EventHarshBraking, EventHarshCornering, EventIdle:
+	case EventHarshAcceleration, EventHarshBraking, EventHarshCornering, EventIdle,
+		EventJobStatus, EventJobStopArrived, EventRouteReturn, EventRefuel:
 		return Channels{InApp: true}
 	}
 	return Channels{InApp: true, Telegram: true, Push: true}
@@ -35,6 +40,7 @@ type Channels struct {
 	InApp    bool `json:"inApp"`
 	Telegram bool `json:"telegram"`
 	Push     bool `json:"push"`
+	Email    bool `json:"email"` // to the user's login address (needs SMTP settings)
 }
 
 // EventPrefs maps event types to channels.
@@ -63,6 +69,7 @@ type PushSubscription struct {
 // Recipient is a user with at least one external notification channel.
 type Recipient struct {
 	UserID       int64
+	Email        string // login address
 	Events       EventPrefs
 	TelegramChat int64 // 0 = not linked
 	Push         []PushSubscription
@@ -112,10 +119,10 @@ func (s *Store) SetEventPrefs(ctx context.Context, userID int64, p EventPrefs) e
 	return err
 }
 
-// Recipients returns every user that has Telegram linked or a push
-// subscription, with their preferences.
+// Recipients returns every user that has Telegram linked, a push
+// subscription or email enabled for some event type, with their preferences.
 func (s *Store) Recipients(ctx context.Context) ([]Recipient, error) {
-	rows, err := s.pool.Query(ctx, `SELECT u.id, p.events, COALESCE(t.chat_id, 0),
+	rows, err := s.pool.Query(ctx, `SELECT u.id, u.email, p.events, COALESCE(t.chat_id, 0),
 			COALESCE(jsonb_agg(jsonb_build_object('endpoint', ps.endpoint, 'p256dh', ps.p256dh, 'auth', ps.auth))
 				FILTER (WHERE ps.id IS NOT NULL), '[]')
 		FROM users u
@@ -123,7 +130,9 @@ func (s *Store) Recipients(ctx context.Context) ([]Recipient, error) {
 		LEFT JOIN telegram_links t ON t.user_id = u.id
 		LEFT JOIN push_subscriptions ps ON ps.user_id = u.id
 		WHERE t.user_id IS NOT NULL OR ps.id IS NOT NULL
-		GROUP BY u.id, p.events, t.chat_id`)
+			OR EXISTS (SELECT 1 FROM jsonb_each(p.events) e
+				WHERE jsonb_typeof(e.value) = 'object' AND e.value->'email' = 'true'::jsonb)
+		GROUP BY u.id, u.email, p.events, t.chat_id`)
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +141,7 @@ func (s *Store) Recipients(ctx context.Context) ([]Recipient, error) {
 			rc  Recipient
 			raw []byte
 		)
-		if err := r.Scan(&rc.UserID, &raw, &rc.TelegramChat, &rc.Push); err != nil {
+		if err := r.Scan(&rc.UserID, &rc.Email, &raw, &rc.TelegramChat, &rc.Push); err != nil {
 			return rc, err
 		}
 		if len(raw) > 0 {

@@ -27,12 +27,26 @@ const (
 	EventIdle              = "idle"
 	EventMaintenanceDue    = "maintenanceDue"
 	EventDocumentExpiry    = "documentExpiry"
+
+	// Phase 4a: dispatch (jobs, routes) and automation (sensors).
+	EventJobAssigned    = "jobAssigned"
+	EventJobStatus      = "jobStatus"
+	EventJobStopArrived = "jobStopArrived"
+	EventJobLate        = "jobLate"
+	EventRouteDeviation = "routeDeviation"
+	EventRouteReturn    = "routeReturn"
+	EventFuelDrain      = "fuelDrain"
+	EventRefuel         = "refuel"
+	EventSensorHigh     = "sensorHigh"
+	EventSensorLow      = "sensorLow"
 )
 
 // EventTypes lists every event type.
 var EventTypes = []string{EventGeofenceEnter, EventGeofenceExit, EventOverspeed, EventIgnitionOn,
 	EventIgnitionOff, EventAlarm, EventCommandResult, EventHarshAcceleration, EventHarshBraking,
-	EventHarshCornering, EventIdle, EventMaintenanceDue, EventDocumentExpiry}
+	EventHarshCornering, EventIdle, EventMaintenanceDue, EventDocumentExpiry,
+	EventJobAssigned, EventJobStatus, EventJobStopArrived, EventJobLate, EventRouteDeviation, EventRouteReturn,
+	EventFuelDrain, EventRefuel, EventSensorHigh, EventSensorLow}
 
 // HarshEventTypes are the driver-behaviour event types.
 var HarshEventTypes = []string{EventHarshAcceleration, EventHarshBraking, EventHarshCornering}

@@ -70,6 +70,10 @@ func bearerToken(r *http.Request) string {
 func (s *Server) authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tok := bearerToken(r)
+		if tok == "" && isFilePath(r.URL.Path) {
+			// <img src> / download links cannot set headers (like the WebSocket).
+			tok = r.URL.Query().Get("token")
+		}
 		if tok == "" {
 			writeError(w, http.StatusUnauthorized, "authentication required")
 			return
@@ -87,6 +91,10 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 			return
 		}
 		p.Role = role
+		if role == store.RoleDriver && !driverAllowed(r) {
+			writeError(w, http.StatusForbidden, "not available for driver accounts")
+			return
+		}
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ctxKey{}, p)))
 	})
 }
@@ -147,4 +155,26 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, u)
+}
+
+const apiPrefix = "/api/v1"
+
+func isFilePath(path string) bool { return strings.HasPrefix(path, apiPrefix+"/files/") }
+
+// driverAllowed reports whether a driver account may call the endpoint:
+// only GET/PATCH /me, /driver/* and GET /files/{id} (checked per file).
+func driverAllowed(r *http.Request) bool {
+	path := strings.TrimPrefix(r.URL.Path, apiPrefix)
+	if strings.Contains(path, "/..") || strings.Contains(path, "//") {
+		return false
+	}
+	switch {
+	case path == "/me":
+		return r.Method == http.MethodGet || r.Method == http.MethodPatch
+	case path == "/driver" || strings.HasPrefix(path, "/driver/"):
+		return true
+	case strings.HasPrefix(path, "/files/"):
+		return r.Method == http.MethodGet || r.Method == http.MethodHead
+	}
+	return false
 }

@@ -101,6 +101,9 @@ type Device struct {
 	EngineHours float64 `json:"engineHours"` // h with ignition on, plus calibration offset
 	DriverID    *int64  `json:"driverId"`    // current driver (iButton tag match, else manual assignment)
 
+	// Phase 4a (automation module): latest calibrated sensor values.
+	Sensors []SensorValue `json:"sensors"`
+
 	odoOffset   float64 // km, devices.odometer_offset
 	hoursOffset float64 // h, devices.engine_hours_offset
 }
@@ -134,13 +137,16 @@ type Store struct {
 
 	geofences atomic.Pointer[[]Geofence] // immutable snapshot, swapped on change
 
-	access   atomic.Pointer[accessSnapshot] // users, groups, memberships
-	accessMu sync.Mutex                     // serializes access reloads
-	drivers  atomic.Pointer[driverIndex]    // driver tags and manual assignments
-	upkeep   chan struct{}                  // kicked when maintenance/reminder inputs change
+	access    atomic.Pointer[accessSnapshot] // users, groups, memberships
+	accessMu  sync.Mutex                     // serializes access reloads
+	drivers   atomic.Pointer[driverIndex]    // driver tags and manual assignments
+	driversMu sync.Mutex                     // serializes driver index reloads
+	upkeep    chan struct{}                  // kicked when maintenance/reminder inputs change
 
 	settingsMu sync.RWMutex
 	settings   Settings
+
+	sensorCache sensorCache // sensor definitions per device + latest readings
 }
 
 // Hooks lets services observe ingest. Callbacks run synchronously on the
@@ -194,6 +200,9 @@ func New(ctx context.Context, pool *pgxpool.Pool, opts Options) (*Store, error) 
 	}
 	if err := s.loadSettings(ctx); err != nil {
 		return nil, fmt.Errorf("load settings: %w", err)
+	}
+	if err := s.loadSensors(ctx, true); err != nil {
+		return nil, fmt.Errorf("load sensors: %w", err)
 	}
 	return s, nil
 }
@@ -283,6 +292,7 @@ func (s *Store) view(e *deviceEntry, now time.Time) Device {
 	d.Odometer = round1(e.odometerKm() + d.odoOffset)
 	d.EngineHours = round1(e.engineSeconds/3600 + d.hoursOffset)
 	d.DriverID = s.currentDriver(d.ID, e.driverTag)
+	d.Sensors = s.deviceSensorValues(d.ID)
 	return d
 }
 

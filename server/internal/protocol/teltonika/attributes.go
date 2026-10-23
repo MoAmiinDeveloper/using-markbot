@@ -46,6 +46,11 @@ var ioTable = map[uint16]ioMapping{
 	89:  {domain.AttrFuel, scaled(1)},              // CAN fuel level, %
 	83:  {domain.AttrFuelUsed, scaled(10)},         // CAN fuel consumed, 0.1 L units -> L
 	115: {domain.AttrEngineTemp, signedScaled(10)}, // CAN engine temperature, 0.1 °C
+
+	// Temperature probes keep their io<ID> key (sensor sources) but are
+	// signed: Dallas 1-wire io72–io75 (0.1 °C), BLE io25–io28 (0.01 °C).
+	72: {"io72", signedRaw}, 73: {"io73", signedRaw}, 74: {"io74", signedRaw}, 75: {"io75", signedRaw},
+	25: {"io25", signedRaw}, 26: {"io26", signedRaw}, 27: {"io27", signedRaw}, 28: {"io28", signedRaw},
 }
 
 // eventAlarms maps event IO ids to alarm names. The alarm is raised only
@@ -83,6 +88,8 @@ func signedScaled(div float64) ioConverter {
 		return float64(signExtend(v, size)) / div, true
 	}
 }
+
+func signedRaw(v uint64, size uint8) (any, bool) { return signExtend(v, size), true }
 
 func hexNonZero(v uint64, size uint8) (any, bool) {
 	if v == 0 {

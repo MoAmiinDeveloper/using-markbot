@@ -30,6 +30,9 @@ services:
       HTTP_ADDR: ":8080"
       TELTONIKA_ADDR: ":5027"
       WEB_DIR: /app/web
+      DATA_DIR: /data
+    volumes:
+      - fleetdata:/data
     ports:
       - "8080:8080"
       - "5027:5027/tcp"
@@ -37,3 +40,4 @@ services:
 
 volumes:
   pgdata:
+  fleetdata:

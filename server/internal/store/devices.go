@@ -85,7 +85,8 @@ func (in *DeviceInput) Normalize() error {
 	}
 	in.Protocol = strings.ToLower(in.Protocol)
 	in.Category = strings.ToLower(in.Category)
-	bridged := in.source == SourceTraccar
+	// Bridged devices and driver-app phones (IMEI DRV<driverId>) use free-form ids.
+	bridged := in.source == SourceTraccar || (in.Protocol == ProtocolDriverApp && strings.HasPrefix(in.IMEI, DriverAppIMEIPrefix))
 	if in.Protocol == "" {
 		in.Protocol = defaultProtocol
 	}

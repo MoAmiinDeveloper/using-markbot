@@ -67,7 +67,7 @@ func TestAnalyticsAPI(t *testing.T) {
 	// Report types.
 	var types []map[string]string
 	e.do("GET", "/api/v1/reports", viewer, nil, 200, &types)
-	if len(types) != 13 {
+	if len(types) != 15 { // 13 Phase 3 + fuel, temperature (Phase 4a)
 		t.Fatalf("types %v", types)
 	}
 

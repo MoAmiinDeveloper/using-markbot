@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/coder/websocket"
@@ -40,10 +41,10 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	}
 	defer c.CloseNow()
 
-	// Device-scoped messages (positions, devices, events, commands) are
-	// filtered per client against the live access snapshot.
+	// Device-scoped messages (positions, devices, events, commands) and jobs
+	// are filtered per client against the live access snapshot (wsAllow).
 	uid := p.UserID
-	sub := s.hub.SubscribeFiltered(func(deviceID int64) bool { return s.store.CanSeeDevice(uid, deviceID) })
+	sub := s.hub.SubscribeFunc(s.wsAllow(uid))
 	defer s.hub.Unsubscribe(sub)
 	scope := s.wsScope(uid)
 
@@ -135,4 +136,51 @@ func (w wsScope) diff(next wsScope, st *store.Store) [][]byte {
 		}
 	}
 	return out
+}
+
+// jobAudienced is implemented by live job payloads (store.Job, store.JobDeleted).
+type jobAudienced interface{ JobAudience() store.JobAudience }
+
+// wsAllow decides which live messages a user's WebSocket receives:
+// device-scoped messages for visible devices, jobs by job audience, and for
+// driver accounts only their jobs plus position/device frames of their
+// vehicle (and driver-app phone).
+func (s *Server) wsAllow(uid int64) func(msgType string, data any) bool {
+	return func(msgType string, data any) bool {
+		role, ok := s.store.UserRole(uid)
+		if !ok {
+			return msgType == store.EventAccess // lets the handler close the socket
+		}
+		if ja, ok := data.(jobAudienced); ok {
+			return s.jobAudienceAllows(uid, role, ja.JobAudience())
+		}
+		sc, scoped := data.(hub.DeviceScoped)
+		if role == store.RoleDriver {
+			switch msgType {
+			case store.EventPosition, store.EventDevice:
+				return scoped && s.store.CanSeeDevice(uid, sc.ScopeDeviceID())
+			case store.EventDeleted, store.EventAccess:
+				return true
+			}
+			return false
+		}
+		return !scoped || s.store.CanSeeDevice(uid, sc.ScopeDeviceID())
+	}
+}
+
+// jobAudienceAllows reports whether a user may see a job (REST and live).
+func (s *Server) jobAudienceAllows(uid int64, role string, a store.JobAudience) bool {
+	switch role {
+	case store.RoleDriver:
+		me := s.store.DriverIDForUser(uid)
+		return me != 0 && slices.Contains(a.DriverIDs, me)
+	case store.RoleAdmin:
+		return true
+	}
+	for _, d := range a.DeviceIDs {
+		if s.store.CanSeeDevice(uid, d) {
+			return true
+		}
+	}
+	return a.NoDevice && role == store.RoleManager
 }

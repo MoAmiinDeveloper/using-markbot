@@ -147,6 +147,8 @@ func (s *Store) DeviceScope(userID int64) (all bool, ids map[int64]bool) {
 		return false, emptyScope
 	case u.role == RoleAdmin:
 		return true, nil
+	case u.role == RoleDriver:
+		return false, s.driverScope(userID)
 	}
 	return false, u.devices
 }

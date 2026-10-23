@@ -33,6 +33,8 @@ type Client struct {
 	C     <-chan []byte
 	ch    chan []byte
 	allow func(deviceID int64) bool // nil = everything
+	// allowMsg, when set, replaces allow and decides for every message.
+	allowMsg func(msgType string, data any) bool
 }
 
 // Hub is an in-memory publish/subscribe broker. The zero value is not usable;
@@ -65,8 +67,12 @@ func (h *Hub) Subscribe() *Client { return h.SubscribeFiltered(nil) }
 // messages for devices allow accepts. allow runs on the publishing goroutine
 // with the hub lock held, so it must be fast and must not call into the hub.
 func (h *Hub) SubscribeFiltered(allow func(deviceID int64) bool) *Client {
+	return h.subscribe(allow, nil)
+}
+
+func (h *Hub) subscribe(allow func(deviceID int64) bool, allowMsg func(string, any) bool) *Client {
 	ch := make(chan []byte, h.buffer)
-	c := &Client{C: ch, ch: ch, allow: allow}
+	c := &Client{C: ch, ch: ch, allow: allow, allowMsg: allowMsg}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.closed {
@@ -75,6 +81,13 @@ func (h *Hub) SubscribeFiltered(allow func(deviceID int64) bool) *Client {
 	}
 	h.clients[c] = struct{}{}
 	return c
+}
+
+// SubscribeFunc registers a client whose allow function decides for every
+// message (type and payload), for visibility rules that depend on more than
+// one device (e.g. dispatch jobs). Same constraints as SubscribeFiltered.
+func (h *Hub) SubscribeFunc(allow func(msgType string, data any) bool) *Client {
+	return h.subscribe(nil, allow)
 }
 
 // Unsubscribe removes c and closes its channel. It is safe to call more than once.
@@ -99,7 +112,11 @@ func (h *Hub) Publish(msgType string, data any) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for c := range h.clients {
-		if isScoped && c.allow != nil && !c.allow(deviceID) {
+		if c.allowMsg != nil {
+			if !c.allowMsg(msgType, data) {
+				continue
+			}
+		} else if isScoped && c.allow != nil && !c.allow(deviceID) {
 			continue
 		}
 		select {

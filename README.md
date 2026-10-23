@@ -34,6 +34,8 @@ cd server && go run ./cmd/fleetd
 cd web && npm install && npm run dev
 # 4. Simulated vehicles
 cd server && go run ./cmd/simulator -devices 25
+#    add -sensors for fuel (io9, mV; calibration [[0,0],[4500,120]]) and
+#    temperature (io72, multiplier 0.1, max 8 °C) sensor data
 ```
 
 ## Running on Windows (no Docker)

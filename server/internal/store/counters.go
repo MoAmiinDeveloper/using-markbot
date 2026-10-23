@@ -246,21 +246,30 @@ func (s *Store) KickUpkeep() {
 type driverIndex struct {
 	byTag    map[string]int64
 	byDevice map[int64]int64
+
+	// Phase 4a: driver-app logins.
+	byUser      map[int64]int64          // user id -> driver id
+	driverUser  map[int64]int64          // driver id -> user id
+	driverScope map[int64]map[int64]bool // user id -> visible devices (vehicle + driver-app phone)
 }
 
 func (s *Store) reloadDrivers(ctx context.Context) error {
-	rows, err := s.pool.Query(ctx, `SELECT id, tag, device_id FROM drivers`)
+	s.driversMu.Lock()
+	defer s.driversMu.Unlock()
+	rows, err := s.pool.Query(ctx, `SELECT id, tag, device_id, user_id FROM drivers`)
 	if err != nil {
 		return err
 	}
-	idx := &driverIndex{byTag: map[string]int64{}, byDevice: map[int64]int64{}}
+	idx := &driverIndex{byTag: map[string]int64{}, byDevice: map[int64]int64{},
+		byUser: map[int64]int64{}, driverUser: map[int64]int64{}, driverScope: map[int64]map[int64]bool{}}
 	for rows.Next() {
 		var (
 			id     int64
 			tag    string
 			device *int64
+			user   *int64
 		)
-		if err := rows.Scan(&id, &tag, &device); err != nil {
+		if err := rows.Scan(&id, &tag, &device, &user); err != nil {
 			rows.Close()
 			return err
 		}
@@ -270,6 +279,18 @@ func (s *Store) reloadDrivers(ctx context.Context) error {
 		if device != nil {
 			idx.byDevice[*device] = id
 		}
+		if user != nil {
+			idx.byUser[*user] = id
+			idx.driverUser[id] = *user
+			scope := map[int64]bool{}
+			if device != nil {
+				scope[*device] = true
+			}
+			if dev, ok := s.deviceIDByIMEI(DriverAppIMEI(id)); ok {
+				scope[dev] = true
+			}
+			idx.driverScope[*user] = scope
+		}
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
@@ -278,6 +299,9 @@ func (s *Store) reloadDrivers(ctx context.Context) error {
 	prev := s.drivers.Swap(idx)
 	if prev == nil {
 		return nil
+	}
+	if !driverScopesEqual(prev.driverScope, idx.driverScope) {
+		defer s.publish(EventAccess, nil) // live clients re-evaluate their scope
 	}
 	// Re-announce devices whose current driver may have changed.
 	now := s.opts.Now()
@@ -321,4 +345,68 @@ func (s *Store) DriverForPosition(p *domain.Position) int64 {
 		return *id
 	}
 	return 0
+}
+
+func driverScopesEqual(a, b map[int64]map[int64]bool) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for u, sa := range a {
+		sb, ok := b[u]
+		if !ok || len(sa) != len(sb) {
+			return false
+		}
+		for d := range sa {
+			if !sb[d] {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// driverScope returns the devices a driver-role user may see: the vehicle
+// assigned to their driver and their driver-app phone (shared map).
+func (s *Store) driverScope(userID int64) map[int64]bool {
+	if idx := s.drivers.Load(); idx != nil {
+		if sc := idx.driverScope[userID]; sc != nil {
+			return sc
+		}
+	}
+	return emptyScope
+}
+
+// DriverIDForUser returns the driver linked to a login (0 when none).
+func (s *Store) DriverIDForUser(userID int64) int64 {
+	if idx := s.drivers.Load(); idx != nil {
+		return idx.byUser[userID]
+	}
+	return 0
+}
+
+// UserIDForDriver returns the login linked to a driver (0 when none).
+func (s *Store) UserIDForDriver(driverID int64) int64 {
+	if idx := s.drivers.Load(); idx != nil {
+		return idx.driverUser[driverID]
+	}
+	return 0
+}
+
+// AssignedDevice returns the vehicle manually assigned to a driver (0 when none).
+func (s *Store) AssignedDevice(driverID int64) int64 {
+	if idx := s.drivers.Load(); idx != nil {
+		for dev, d := range idx.byDevice {
+			if d == driverID {
+				return dev
+			}
+		}
+	}
+	return 0
+}
+
+func (s *Store) deviceIDByIMEI(imei string) (int64, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	id, ok := s.byIMEI[imei]
+	return id, ok
 }

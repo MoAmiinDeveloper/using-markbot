@@ -44,6 +44,9 @@ type device struct {
 func (d *device) run(ctx context.Context) {
 	defer d.disconnect()
 	v := newVehicle(d.rng, d.cfg.lat, d.cfg.lng, time.Now())
+	if d.cfg.sensors {
+		v.sensors = newSensorSim(d.rng, time.Now())
+	}
 	tick := time.NewTicker(d.cfg.interval)
 	defer tick.Stop()
 

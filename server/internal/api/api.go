@@ -15,10 +15,12 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	"github.com/moamiindeveloper/fleet/server/internal/commands"
+	"github.com/moamiindeveloper/fleet/server/internal/dispatch"
 	"github.com/moamiindeveloper/fleet/server/internal/geocode"
 	"github.com/moamiindeveloper/fleet/server/internal/hub"
 	"github.com/moamiindeveloper/fleet/server/internal/notify"
 	"github.com/moamiindeveloper/fleet/server/internal/reports"
+	"github.com/moamiindeveloper/fleet/server/internal/schedule"
 	"github.com/moamiindeveloper/fleet/server/internal/store"
 )
 
@@ -42,6 +44,12 @@ type Config struct {
 	// places-only geocoder is used. Reports defaults to an engine on the store.
 	Geocoder *geocode.Service
 	Reports  *reports.Engine
+	// Dispatch backs jobs, the driver app and routes (Phase 4a); when nil a
+	// service storing uploads under "data" is created (no notifications).
+	Dispatch *dispatch.Service
+	// Scheduler runs scheduled reports on demand (POST …/run); defaults to
+	// one built on Reports and Notifier (automation module).
+	Scheduler *schedule.Service
 }
 
 // Server holds the API dependencies.
@@ -62,6 +70,9 @@ func New(st *store.Store, h *hub.Hub, cfg Config) http.Handler {
 	}
 	if cfg.Logger == nil {
 		cfg.Logger = slog.New(slog.DiscardHandler)
+	}
+	if cfg.Dispatch == nil {
+		cfg.Dispatch = dispatch.New(st, dispatch.Options{Logger: cfg.Logger})
 	}
 	s := &Server{store: st, hub: h, cfg: cfg, log: cfg.Logger}
 	s.parseOrigins(cfg.CORSOrigins)

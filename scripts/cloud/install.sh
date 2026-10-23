@@ -96,9 +96,13 @@ ADMIN_PASSWORD=${ADMIN_PASS}
 AUTO_REGISTER=true
 WEB_DIR=${APP_DIR}/web/dist
 LOG_FORMAT=json
+DATA_DIR=/var/lib/fleet
 EOF
   echo "$ADMIN_PASS" > /etc/fleet/initial-admin-password
 fi
+# Uploaded files (job attachments); older env files get the setting appended.
+grep -q '^DATA_DIR=' "$ENV_FILE" || echo "DATA_DIR=/var/lib/fleet" >> "$ENV_FILE"
+mkdir -p /var/lib/fleet && chown fleet:fleet /var/lib/fleet && chmod 750 /var/lib/fleet
 chown -R root:fleet /etc/fleet && chmod 640 "$ENV_FILE" /etc/fleet/initial-admin-password 2>/dev/null || true
 
 log "Installing services"
