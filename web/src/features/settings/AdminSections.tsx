@@ -1,11 +1,12 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Bot, CircleCheck, Eye, EyeOff, Gauge, KeyRound, RefreshCw, Waypoints } from 'lucide-react'
+import { Bot, CircleCheck, Coins, Eye, EyeOff, Gauge, KeyRound, RefreshCw, Waypoints } from 'lucide-react'
 import { api, ApiError, qk } from '@/api/client'
 import type { Settings, SettingsPatch } from '@/api/types'
 import { API_BASE } from '@/config'
 import { Button } from '@/components/ui/Button'
-import { Field, Input } from '@/components/ui/Input'
+import { Field, Input, Select } from '@/components/ui/Input'
+import { Switch } from '@/components/ui/Switch'
 import { Modal } from '@/components/ui/Modal'
 import { toast } from '@/store/toast'
 import { AdminBadge, Code, CopyField, SettingsCard, Steps } from './ui'
@@ -303,6 +304,71 @@ export function TraccarSection({ settings }: { settings: Settings }) {
           </>
         }
       />
+    </SettingsCard>
+  )
+}
+
+const CURRENCIES = ['USD', 'SOS', 'AED', 'EUR', 'KES', 'ETB', 'DJF', 'SAR', 'GBP']
+
+export function OperationsSection({ settings }: { settings: Settings }) {
+  const [currency, setCurrency] = useState(settings.currency || 'USD')
+  const [idle, setIdle] = useState(String(settings.idleAlertMinutes ?? 0))
+  const [harsh, setHarsh] = useState(settings.harshScoring ?? true)
+  useEffect(() => {
+    setCurrency(settings.currency || 'USD')
+    setIdle(String(settings.idleAlertMinutes ?? 0))
+    setHarsh(settings.harshScoring ?? true)
+  }, [settings.currency, settings.idleAlertMinutes, settings.harshScoring])
+  const save = useSaveSettings('Fleet operations saved')
+  const idleErr = !/^\d{1,4}$/.test(idle) || +idle > 1440 ? '0 – 1440 minutes' : undefined
+  const dirty = currency !== (settings.currency || 'USD') || idle !== String(settings.idleAlertMinutes ?? 0) || harsh !== (settings.harshScoring ?? true)
+  const submit = (e: FormEvent) => {
+    e.preventDefault()
+    if (idleErr) return
+    save.mutate({ currency, idleAlertMinutes: +idle, harshScoring: harsh })
+  }
+  return (
+    <SettingsCard id="operations" icon={<Coins />} title="Fleet operations" badge={<AdminBadge />} description="Currency for expenses and reports, idle alerts and driver-behaviour scoring.">
+      <form onSubmit={submit} className="space-y-4" noValidate>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Currency" hint="Used for expenses, maintenance costs and reports">
+            {(id, d) => (
+              <Select id={id} aria-describedby={d} value={currency} onChange={(e) => setCurrency(e.target.value)}>
+                {[...new Set([currency, ...CURRENCIES])].map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </Field>
+          <Field label="Idle alert after" error={idleErr} hint={idleErr ? undefined : '0 turns idle alerts off'}>
+            {(id, d) => (
+              <Input
+                id={id}
+                aria-describedby={d}
+                inputMode="numeric"
+                value={idle}
+                invalid={!!idleErr}
+                onChange={(e) => setIdle(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                trailing={<span className="pr-1.5 text-[11px] text-slate-400">min</span>}
+              />
+            )}
+          </Field>
+        </div>
+        <div className="flex items-center justify-between gap-4 rounded-xl border border-slate-200/80 px-3 py-2.5 dark:border-white/[0.07]">
+          <div>
+            <p className="text-[13px] font-medium text-slate-900 dark:text-white">Harsh driving in scores</p>
+            <p className="text-[12px] text-slate-500 dark:text-slate-400">Count harsh acceleration, braking and cornering in the driver behaviour score</p>
+          </div>
+          <Switch checked={harsh} onChange={setHarsh} label="Harsh driving in scores" />
+        </div>
+        <div className="flex justify-end">
+          <Button type="submit" variant="primary" disabled={!dirty || !!idleErr} loading={save.isPending}>
+            Save
+          </Button>
+        </div>
+      </form>
     </SettingsCard>
   )
 }

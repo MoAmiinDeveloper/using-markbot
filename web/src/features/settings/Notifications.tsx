@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { Fragment, useCallback, useEffect, useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Bell, BellRing, CircleCheck, ExternalLink, LoaderCircle, MonitorSmartphone, Send, Smartphone, Unlink } from 'lucide-react'
 import { api, ApiError, qk } from '@/api/client'
-import { NOTIFY_EVENT_TYPES, type Channel, type NotificationPrefs, type Settings } from '@/api/types'
+import type { Channel, ChannelPrefs, NotificationPrefs, NotifyEventType, Settings } from '@/api/types'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { Skeleton } from '@/components/ui/Misc'
@@ -13,6 +13,19 @@ import { cn } from '@/lib/cn'
 import { QrCode } from './QrCode'
 import { currentSubscription, disablePush, enablePush, pushSupported } from './push'
 import { SettingsCard } from './ui'
+
+/** Matrix rows, grouped. */
+const GROUPS: Array<{ label: string; types: NotifyEventType[] }> = [
+  { label: 'Zones & trips', types: ['geofenceEnter', 'geofenceExit', 'ignitionOn', 'ignitionOff'] },
+  { label: 'Safety & driving', types: ['alarm', 'overspeed', 'harshAcceleration', 'harshBraking', 'harshCornering', 'idle'] },
+  { label: 'Fleet operations', types: ['maintenanceDue', 'documentExpiry'] },
+]
+
+/** Server defaults for keys an older server may not return yet. */
+function defaultChannels(t: NotifyEventType): ChannelPrefs {
+  const quiet = t === 'idle' || t.startsWith('harsh')
+  return { inApp: true, telegram: !quiet, push: !quiet }
+}
 
 function TelegramIcon({ className }: { className?: string }) {
   return (
@@ -232,9 +245,10 @@ export function NotificationsSection({ settings }: { settings: Settings | undefi
   const tgConfigured = settings?.telegramConfigured ?? true
   const pushAny = !!p?.push?.enabled
 
-  const toggle = (type: (typeof NOTIFY_EVENT_TYPES)[number], ch: Channel, v: boolean) => {
+  const prefOf = (t: NotifyEventType): ChannelPrefs => p?.events[t] ?? defaultChannels(t)
+  const toggle = (type: NotifyEventType, ch: Channel, v: boolean) => {
     if (!p) return
-    const events = { ...p.events, [type]: { ...p.events[type], [ch]: v } }
+    const events = { ...p.events, [type]: { ...prefOf(type), [ch]: v } }
     save.mutate(events)
   }
 
@@ -326,39 +340,49 @@ export function NotificationsSection({ settings }: { settings: Settings | undefi
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-white/[0.05]">
-                {NOTIFY_EVENT_TYPES.map((t) => {
-                  const m = EVENT_META[t]
-                  const Icon = m.icon
-                  return (
-                    <tr key={t}>
-                      <td className="px-3 py-2.5 sm:px-4">
-                        <div className="flex items-center gap-2.5">
-                          <span className={cn('grid h-7 w-7 shrink-0 place-items-center rounded-lg', m.chip)}>
-                            <Icon className="h-3.5 w-3.5" />
-                          </span>
-                          <div className="min-w-0">
-                            <p className="truncate font-medium text-slate-900 dark:text-white">{m.label}</p>
-                            <p className="hidden truncate text-[11.5px] text-slate-500 dark:text-slate-400 sm:block">{m.description}</p>
-                          </div>
-                        </div>
-                      </td>
-                      {columns.map((c) => (
-                        <td key={c.ch} className="px-1 py-2.5 text-center">
-                          <span title={c.disabled ? c.why : undefined} className="inline-flex">
-                            <Switch
-                              size="sm"
-                              checked={!!p.events[t]?.[c.ch]}
-                              disabled={c.disabled}
-                              onChange={(v) => toggle(t, c.ch, v)}
-                              label={`${m.label} via ${c.label}`}
-                              className={cn(c.disabled && 'pointer-events-none')}
-                            />
-                          </span>
-                        </td>
-                      ))}
+                {GROUPS.map((g) => (
+                  <Fragment key={g.label}>
+                    <tr className="bg-slate-50/60 dark:bg-white/[0.015]">
+                      <th scope="colgroup" colSpan={4} className="px-3 pb-1.5 pt-2.5 text-left sm:px-4">
+                        <span className="label-xs !text-[10.5px]">{g.label}</span>
+                      </th>
                     </tr>
-                  )
-                })}
+                    {g.types.map((t) => {
+                      const m = EVENT_META[t]
+                      const Icon = m.icon
+                      const pref = prefOf(t)
+                      return (
+                        <tr key={t}>
+                          <td className="px-3 py-2.5 sm:px-4">
+                            <div className="flex items-center gap-2.5">
+                              <span className={cn('grid h-7 w-7 shrink-0 place-items-center rounded-lg', m.chip)}>
+                                <Icon className="h-3.5 w-3.5" />
+                              </span>
+                              <div className="min-w-0">
+                                <p className="truncate font-medium text-slate-900 dark:text-white">{m.label}</p>
+                                <p className="hidden truncate text-[11.5px] text-slate-500 dark:text-slate-400 sm:block">{m.description}</p>
+                              </div>
+                            </div>
+                          </td>
+                          {columns.map((c) => (
+                            <td key={c.ch} className="px-1 py-2.5 text-center">
+                              <span title={c.disabled ? c.why : undefined} className="inline-flex">
+                                <Switch
+                                  size="sm"
+                                  checked={!!pref[c.ch]}
+                                  disabled={c.disabled}
+                                  onChange={(v) => toggle(t, c.ch, v)}
+                                  label={`${m.label} via ${c.label}`}
+                                  className={cn(c.disabled && 'pointer-events-none')}
+                                />
+                              </span>
+                            </td>
+                          ))}
+                        </tr>
+                      )
+                    })}
+                  </Fragment>
+                ))}
               </tbody>
             </table>
           </div>

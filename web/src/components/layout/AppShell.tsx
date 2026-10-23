@@ -10,13 +10,15 @@ import { startClock } from '@/store/now'
 import { BottomNav, NavRail } from './NavRail'
 import { TopBar } from './TopBar'
 import { NAV } from './nav'
+import { normRole } from '@/lib/access'
 
 export function AppShell() {
   const token = useAuth((s) => s.token)
   const setUser = useAuth((s) => s.setUser)
   const loc = useLocation()
   const qc = useQueryClient()
-  const userId = useAuth((s) => s.user?.id ?? null)
+  const user = useAuth((s) => s.user)
+  const userId = user?.id ?? null
 
   useEffect(() => {
     useAlerts.getState().setUser(userId)
@@ -48,6 +50,7 @@ export function AppShell() {
   if (!token) return <Navigate to="/login" replace state={{ from: loc.pathname + loc.search }} />
 
   const title = NAV.find((n) => loc.pathname.startsWith(n.to))?.label ?? ''
+  if (loc.pathname.startsWith('/admin') && user && normRole(user.role) !== 'admin') return <Navigate to="/live" replace />
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden">

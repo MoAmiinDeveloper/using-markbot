@@ -1,12 +1,19 @@
-// Types mirroring docs/API.md (v1 + Phase 2 additions). Keep in sync with the contract.
+// Types mirroring docs/API.md (v1 + Phase 2 + Phase 3 additions). Keep in sync with the contract.
 
-export type Role = 'admin' | 'user'
+/** Phase 3 roles. Legacy `user` rows migrate to `manager` server-side; the UI treats `user` as manager too. */
+export type Role = 'admin' | 'manager' | 'viewer' | 'user'
+export const ROLES = ['admin', 'manager', 'viewer'] as const
 
 export interface User {
   id: number
   email: string
   name: string
   role: Role
+  /** Phase 3: groups the user belongs to (non-admins only see devices in these) */
+  groupIds?: number[]
+  active?: boolean
+  createdAt?: string
+  lastLoginAt?: string | null
 }
 
 export interface LoginResponse {
@@ -69,6 +76,14 @@ export interface Device {
   source: DeviceSource
   /** whether the device can receive commands right now (direct + connected) */
   commands: boolean
+  /** Phase 3 */
+  groupIds?: number[]
+  /** km — tracker odometer if reported, else accumulated GPS distance */
+  odometer?: number
+  /** hours of ignition-on time */
+  engineHours?: number
+  /** current driver */
+  driverId?: number | null
 }
 
 export type DeviceSource = 'direct' | 'traccar'
@@ -82,6 +97,9 @@ export interface DeviceInput {
   category?: string
   phone?: string
   speedLimit?: number
+  /** Phase 3 calibration (km / hours) */
+  odometer?: number
+  engineHours?: number
 }
 
 export interface Trip {
@@ -117,12 +135,31 @@ export const EVENT_TYPES = [
   'ignitionOn',
   'ignitionOff',
   'alarm',
+  'harshAcceleration',
+  'harshBraking',
+  'harshCornering',
+  'idle',
+  'maintenanceDue',
+  'documentExpiry',
   'commandResult',
 ] as const
 export type EventType = (typeof EVENT_TYPES)[number]
 
 /** Event types users can configure notifications for (commandResult is in-app only). */
-export const NOTIFY_EVENT_TYPES = ['geofenceEnter', 'geofenceExit', 'overspeed', 'ignitionOn', 'ignitionOff', 'alarm'] as const
+export const NOTIFY_EVENT_TYPES = [
+  'geofenceEnter',
+  'geofenceExit',
+  'overspeed',
+  'ignitionOn',
+  'ignitionOff',
+  'alarm',
+  'harshAcceleration',
+  'harshBraking',
+  'harshCornering',
+  'idle',
+  'maintenanceDue',
+  'documentExpiry',
+] as const
 export type NotifyEventType = (typeof NOTIFY_EVENT_TYPES)[number]
 
 export interface EventAttributes {
@@ -210,9 +247,16 @@ export interface Settings {
   telegramConfigured: boolean
   telegramBotUsername: string
   traccarToken: string
+  /** Phase 3 */
+  currency?: string
+  /** 0 = off */
+  idleAlertMinutes?: number
+  harshScoring?: boolean
 }
 
-export type SettingsPatch = Partial<Pick<Settings, 'speedLimit' | 'overspeedMinDuration' | 'telegramBotToken'>>
+export type SettingsPatch = Partial<
+  Pick<Settings, 'speedLimit' | 'overspeedMinDuration' | 'telegramBotToken' | 'currency' | 'idleAlertMinutes' | 'harshScoring'>
+>
 
 export interface ChannelPrefs {
   inApp: boolean
@@ -224,7 +268,8 @@ export type Channel = keyof ChannelPrefs
 export interface NotificationPrefs {
   telegramLinked: boolean
   push: { enabled: boolean }
-  events: Record<NotifyEventType, ChannelPrefs>
+  /** older servers may not return the Phase 3 keys */
+  events: Partial<Record<NotifyEventType, ChannelPrefs>>
 }
 
 export interface TestNotificationResult {
@@ -247,3 +292,237 @@ export type WsMessage =
   | { type: 'command'; data: Command }
   | { type: 'geofences' }
   | { type: 'notifications' }
+
+// ---------------------------------------------------------------- Phase 3
+
+export interface Group {
+  id: number
+  name: string
+  color: string
+  deviceIds: number[]
+  createdAt: string
+}
+export type GroupInput = Pick<Group, 'name' | 'color' | 'deviceIds'>
+
+export interface UserInput {
+  email: string
+  name: string
+  password?: string
+  role: Exclude<Role, 'user'>
+  groupIds: number[]
+  active?: boolean
+}
+
+export interface MePatch {
+  name?: string
+  currentPassword?: string
+  newPassword?: string
+}
+
+export interface Driver {
+  id: number
+  name: string
+  phone: string
+  licenseNumber: string
+  /** YYYY-MM-DD or "" */
+  licenseExpiry: string
+  /** iButton / RFID id (hex) */
+  tag: string
+  deviceId: number | null
+  notes: string
+  createdAt: string
+}
+export type DriverInput = Omit<Driver, 'id' | 'createdAt'>
+
+export type DueStatus = 'ok' | 'dueSoon' | 'overdue'
+
+export interface Maintenance {
+  id: number
+  deviceId: number
+  name: string
+  intervalKm: number
+  intervalDays: number
+  intervalHours: number
+  lastServiceDate: string
+  lastServiceKm: number
+  lastServiceHours: number
+  notifyBeforeKm: number
+  notifyBeforeDays: number
+  notifyBeforeHours: number
+  status: DueStatus
+  nextDueKm: number | null
+  nextDueDate: string | null
+  nextDueHours: number | null
+  remainingKm: number | null
+  remainingDays: number | null
+  remainingHours: number | null
+}
+export type MaintenanceInput = Pick<
+  Maintenance,
+  | 'deviceId'
+  | 'name'
+  | 'intervalKm'
+  | 'intervalDays'
+  | 'intervalHours'
+  | 'lastServiceDate'
+  | 'lastServiceKm'
+  | 'lastServiceHours'
+  | 'notifyBeforeKm'
+  | 'notifyBeforeDays'
+  | 'notifyBeforeHours'
+>
+
+export interface ServiceRecord {
+  id: number
+  maintenanceId: number
+  deviceId: number
+  date: string
+  odometer: number | null
+  engineHours: number | null
+  cost: number | null
+  notes: string
+}
+
+export interface CompleteMaintenanceInput {
+  date: string
+  odometer?: number
+  engineHours?: number
+  cost?: number
+  notes?: string
+}
+
+export const REMINDER_KINDS = ['insurance', 'registration', 'license', 'permit', 'inspection', 'other'] as const
+export type ReminderKind = (typeof REMINDER_KINDS)[number]
+
+export interface Reminder {
+  id: number
+  deviceId: number | null
+  driverId: number | null
+  kind: ReminderKind
+  title: string
+  dueDate: string
+  notifyDaysBefore: number
+  status: DueStatus
+  notes: string
+}
+export type ReminderInput = Omit<Reminder, 'id' | 'status'>
+
+export const EXPENSE_CATEGORIES = ['fuel', 'maintenance', 'toll', 'parking', 'fine', 'insurance', 'tyres', 'other'] as const
+export type ExpenseCategory = (typeof EXPENSE_CATEGORIES)[number]
+
+export interface Expense {
+  id: number
+  deviceId: number
+  driverId: number | null
+  category: ExpenseCategory
+  amount: number
+  liters: number | null
+  odometer: number | null
+  date: string
+  notes: string
+  createdAt: string
+}
+export type ExpenseInput = Omit<Expense, 'id' | 'createdAt'>
+
+export interface ExpenseQuery {
+  deviceId?: number
+  from?: string
+  to?: string
+  category?: string
+}
+
+export interface Share {
+  token: string
+  /** relative, e.g. /share/<token> */
+  url: string
+  expiresAt: string
+  createdAt?: string
+}
+
+export interface PublicShare {
+  name: string
+  category: string
+  position: Position | null
+  status: DeviceStatus
+  expiresAt: string
+}
+
+export const PLACE_CATEGORIES = ['depot', 'customer', 'fuel', 'parking', 'workshop', 'other'] as const
+export type PlaceCategory = (typeof PLACE_CATEGORIES)[number]
+
+export interface Place {
+  id: number
+  name: string
+  category: PlaceCategory
+  lat: number
+  lng: number
+  radius: number
+  color: string
+  createdAt: string
+}
+export type PlaceInput = Omit<Place, 'id' | 'createdAt'>
+
+export interface Geocode {
+  address: string
+  place: Place | null
+}
+
+export const REPORT_TYPES = [
+  'summary',
+  'daily',
+  'trips',
+  'stops',
+  'idle',
+  'ignition',
+  'overspeed',
+  'geofence',
+  'alerts',
+  'driver',
+  'maintenance',
+  'expenses',
+  'systemLog',
+] as const
+export type ReportType = (typeof REPORT_TYPES)[number]
+export type ReportFormat = 'json' | 'csv' | 'xlsx' | 'pdf'
+export type ColumnKind = 'number' | 'duration' | 'datetime' | 'text' | 'speed' | 'money' | 'link'
+
+export interface ReportColumn {
+  key: string
+  label: string
+  unit?: string
+  kind: ColumnKind
+}
+
+export type ReportValue = string | number | boolean | null | undefined
+export type ReportRow = Record<string, ReportValue>
+
+export interface Report {
+  type: ReportType | string
+  title: string
+  subtitle?: string
+  from: string
+  to: string
+  columns: ReportColumn[]
+  rows: ReportRow[]
+  totals?: Record<string, ReportValue>
+}
+
+export interface ReportQuery {
+  deviceIds?: number[]
+  groupId?: number
+  driverId?: number
+  from: string
+  to: string
+}
+
+export interface DashboardData {
+  distanceByDay: Array<{ date: string; distance: number }>
+  alertsByType: Record<string, number>
+  topVehicles: Array<{ deviceId: number; name: string; distance: number }>
+  driverScores: Array<{ driverId: number | null; name: string; score: number; distance: number }>
+  maintenance: { dueSoon: number; overdue: number }
+  reminders: { dueSoon: number; overdue: number }
+  expenses: { total: number; currency: string }
+  /** 0..1 */
+  utilization: number
+}

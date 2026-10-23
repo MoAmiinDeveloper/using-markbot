@@ -1,13 +1,15 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Bell, Bot, Gauge, LogOut, Moon, Sun, UserRound, Waypoints, type LucideIcon } from 'lucide-react'
+import { Bell, Bot, Coins, Gauge, LogOut, Moon, Sun, UserRound, Waypoints, type LucideIcon } from 'lucide-react'
 import { api, qk } from '@/api/client'
 import { useAuth } from '@/store/auth'
 import { useUi } from '@/store/ui'
 import { Button } from '@/components/ui/Button'
 import { Skeleton } from '@/components/ui/Misc'
 import { NotificationsSection } from '@/features/settings/Notifications'
-import { AlertRulesSection, TelegramBotSection, TraccarSection } from '@/features/settings/AdminSections'
+import { AlertRulesSection, OperationsSection, TelegramBotSection, TraccarSection } from '@/features/settings/AdminSections'
+import { ProfileForm } from '@/features/settings/Profile'
+import { RoleBadge } from '@/components/ui/Badges'
 import { SettingsCard } from '@/features/settings/ui'
 import { APP_NAME } from '@/config'
 import { cn } from '@/lib/cn'
@@ -25,7 +27,7 @@ function AccountSection() {
       .join('')
       .toUpperCase() || '?'
   return (
-    <SettingsCard id="account" icon={<UserRound />} title="Account" description="Your profile and preferences on this device.">
+    <SettingsCard id="account" icon={<UserRound />} title="Account" description="Your profile, password and preferences on this device.">
       <div className="divide-y divide-slate-100 dark:divide-white/[0.05]">
         <div className="flex flex-wrap items-center gap-3 pb-4">
           <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-gradient-to-br from-brand-300 to-brand-500 text-[14px] font-semibold text-navy-900">
@@ -35,12 +37,9 @@ function AccountSection() {
             <p className="truncate font-medium text-slate-900 dark:text-white">{name}</p>
             <p className="truncate text-[12.5px] text-slate-500 dark:text-slate-400">{user?.email}</p>
           </div>
-          {user?.role && (
-            <span className="rounded-md bg-brand-500/10 px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide text-navy-600 dark:text-brand-300">
-              {user.role}
-            </span>
-          )}
+          {user?.role && <RoleBadge role={user.role} />}
         </div>
+        <ProfileForm />
         <div className="flex items-center justify-between gap-4 py-4">
           <div>
             <p className="font-medium text-slate-900 dark:text-white">Appearance</p>
@@ -81,6 +80,7 @@ function AccountSection() {
 const SECTIONS: Array<{ id: string; label: string; icon: LucideIcon; admin?: boolean }> = [
   { id: 'notifications', label: 'Notifications', icon: Bell },
   { id: 'rules', label: 'Alert rules', icon: Gauge, admin: true },
+  { id: 'operations', label: 'Fleet operations', icon: Coins, admin: true },
   { id: 'telegram', label: 'Telegram bot', icon: Bot, admin: true },
   { id: 'traccar', label: 'Traccar bridge', icon: Waypoints, admin: true },
   { id: 'account', label: 'Account', icon: UserRound },
@@ -150,6 +150,7 @@ export default function SettingsPage() {
             {isAdmin && (
               <>
                 {adminBody((x) => <AlertRulesSection settings={x} />, 'rules')}
+                {adminBody((x) => <OperationsSection settings={x} />, 'operations')}
                 {adminBody((x) => <TelegramBotSection settings={x} />, 'telegram')}
                 {adminBody((x) => <TraccarSection settings={x} />, 'traccar')}
                 {settings.isError && (

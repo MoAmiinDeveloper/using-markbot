@@ -11,6 +11,13 @@ const DevicesPage = lazy(() => import('./pages/Devices'))
 const SettingsPage = lazy(() => import('./pages/Settings'))
 const AlertsPage = lazy(() => import('./pages/Alerts'))
 const GeofencesPage = lazy(() => import('./pages/Geofences'))
+const ReportsPage = lazy(() => import('./pages/Reports'))
+const DriversPage = lazy(() => import('./pages/Drivers'))
+const MaintenancePage = lazy(() => import('./pages/Maintenance'))
+const AdminPage = lazy(() => import('./pages/Admin'))
+const SharePage = lazy(() => import('./pages/Share'))
+
+const lazyEl = (el: JSX.Element) => <Suspense fallback={<PageFallback />}>{el}</Suspense>
 
 function PageFallback() {
   return (
@@ -25,6 +32,7 @@ export function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/share/:token" element={lazyEl(<SharePage />)} />
         <Route element={<AppShell />}>
           <Route index element={<Navigate to="/live" replace />} />
           <Route path="/live" element={<LiveMapPage />} />
@@ -76,6 +84,10 @@ export function App() {
               </Suspense>
             }
           />
+          <Route path="/reports" element={lazyEl(<ReportsPage />)} />
+          <Route path="/drivers" element={lazyEl(<DriversPage />)} />
+          <Route path="/maintenance" element={lazyEl(<MaintenancePage />)} />
+          <Route path="/admin" element={lazyEl(<AdminPage />)} />
           <Route path="*" element={<Navigate to="/live" replace />} />
         </Route>
       </Routes>

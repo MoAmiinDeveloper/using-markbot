@@ -7,6 +7,8 @@ import { timeAgo } from '@/lib/format'
 import { useNow } from '@/store/now'
 import { EmptyState, Skeleton, StatusPill } from '@/components/ui/Misc'
 import { cn } from '@/lib/cn'
+import { useGroups } from '@/features/common/queries'
+import { FolderTree } from 'lucide-react'
 
 const ROW_H = 66
 
@@ -109,19 +111,26 @@ export function DeviceList({
   const now = useNow()
   const [q, setQ] = useState('')
   const [filter, setFilter] = useState<StatusFilter>('all')
-  const counts = useMemo(() => countByStatus(devices), [devices])
+  const groups = useGroups()
+  const [groupId, setGroupId] = useState<number | null>(null)
+  const group = groups.data?.find((g) => g.id === groupId) ?? null
+  const inGroup = useMemo(
+    () => (group ? devices.filter((d) => group.deviceIds.includes(d.id) || d.groupIds?.includes(group.id)) : devices),
+    [devices, group],
+  )
+  const counts = useMemo(() => countByStatus(inGroup), [inGroup])
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase()
-    return devices.filter(
+    return inGroup.filter(
       (d) =>
         (filter === 'all' || d.status === filter) &&
         (!s || d.name.toLowerCase().includes(s) || d.plate.toLowerCase().includes(s) || d.imei.includes(s)),
     )
-  }, [devices, q, filter])
+  }, [inGroup, q, filter])
 
   const chips: Array<{ id: StatusFilter; label: string; count: number; color?: string }> = [
-    { id: 'all', label: 'All', count: devices.length },
+    { id: 'all', label: 'All', count: inGroup.length },
     ...STATUSES.filter((s) => s !== 'never' || counts.never > 0).map((s) => ({
       id: s,
       label: s === 'never' ? 'Never' : STATUS_META[s].label,
@@ -181,6 +190,33 @@ export function DeviceList({
           )}
         </div>
         <div role="group" aria-label="Status filter" className="-mx-1 mt-2.5 flex gap-1.5 overflow-x-auto px-1 pb-2.5 md:flex-wrap md:overflow-visible">
+          {!!groups.data?.length && (
+            <label
+              className={cn(
+                'relative inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border pl-2 pr-2.5 text-[12px] font-medium transition-colors',
+                group
+                  ? 'border-brand-500 bg-brand-500/15 text-navy-800 dark:text-brand-100'
+                  : 'border-slate-200 bg-white/60 text-slate-600 hover:border-slate-300 dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-300',
+              )}
+            >
+              {group ? <span className="h-2 w-2 rounded-full" style={{ background: group.color }} /> : <FolderTree className="h-3.5 w-3.5" />}
+              <span className="max-w-[110px] truncate">{group ? group.name : 'Group'}</span>
+              <ChevronUp className="h-3 w-3 rotate-180 opacity-60" />
+              <select
+                aria-label="Filter by group"
+                value={groupId ?? ''}
+                onChange={(e) => setGroupId(e.target.value ? Number(e.target.value) : null)}
+                className="absolute inset-0 cursor-pointer opacity-0"
+              >
+                <option value="">All groups</option>
+                {groups.data.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.name} ({g.deviceIds.length})
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           {chips.map((c) => {
             const active = filter === c.id
             return (
@@ -229,7 +265,7 @@ export function DeviceList({
         <div className="flex min-h-0 flex-1 flex-col pt-2">
           <VirtualList
             items={filtered}
-            resetKey={`${filter}|${q}`}
+            resetKey={`${filter}|${q}|${groupId}`}
             render={(d) => <Row d={d} now={now} selected={d.id === selectedId} onClick={() => onSelect(d.id)} />}
           />
         </div>

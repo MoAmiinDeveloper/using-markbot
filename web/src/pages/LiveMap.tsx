@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Hexagon, Maximize, RefreshCw, TriangleAlert, X } from 'lucide-react'
+import { Hexagon, MapPin, Maximize, RefreshCw, TriangleAlert, X } from 'lucide-react'
+import { PlacesLayer } from '@/components/map/PlacesLayer'
+import { usePlaces } from '@/features/common/queries'
 import type { PaddingOptions } from 'maplibre-gl'
 import { MapCanvas, useMapCtx } from '@/components/map/MapCanvas'
 import { ControlButton, ControlGroup, MapControls } from '@/components/map/MapControls'
@@ -113,6 +115,9 @@ export function LiveMapPage() {
   const showGeofences = useUi((s) => s.showGeofences)
   const toggleGeofences = useUi((s) => s.toggleGeofences)
   const geofences = useGeofences(showGeofences, true)
+  const showPlaces = useUi((s) => s.showPlaces)
+  const togglePlaces = useUi((s) => s.togglePlaces)
+  const places = usePlaces(showPlaces)
   const [follow, setFollow] = useState(false)
   const [fitTick, setFitTick] = useState(0)
   const [expanded, setExpanded] = useState(false)
@@ -136,6 +141,7 @@ export function LiveMapPage() {
     <div className="absolute inset-0">
       <MapCanvas className="absolute inset-0">
         {showGeofences && <GeofenceLayer geofences={geofences.data ?? []} />}
+        {showPlaces && <PlacesLayer places={places.data ?? []} />}
         {at && <EventPin lng={at[0]} lat={at[1]} color={eventMeta(atType ?? '').color} title="Alert location" />}
         <VehicleLayer
           devices={devices}
@@ -203,6 +209,9 @@ export function LiveMapPage() {
                 active={showGeofences}
               >
                 <Hexagon className="h-[16px] w-[16px]" />
+              </ControlButton>
+              <ControlButton label={showPlaces ? 'Hide places' : 'Show places'} onClick={togglePlaces} active={showPlaces}>
+                <MapPin className="h-[16px] w-[16px]" />
               </ControlButton>
             </ControlGroup>
           </MapControls>

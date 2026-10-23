@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { lazy, Suspense, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Battery,
@@ -16,12 +16,20 @@ import {
   Satellite,
   Signal,
   Milestone,
+  Share2,
+  Timer,
+  UserRound,
   X,
 } from 'lucide-react'
+import { useDrivers } from '@/features/common/queries'
+import { useAddress } from '@/lib/geocode'
+import { useAccess } from '@/lib/access'
+import { placeMeta } from '@/lib/ops'
+const ShareDialog = lazy(() => import('./ShareDialog').then((m) => ({ default: m.ShareDialog })))
 import type { Device } from '@/api/types'
 import { CategoryIcon, categoryMeta } from '@/lib/category'
 import { STATUS_META } from '@/lib/status'
-import { fmtCoord, fmtDateTime, fmtOdometer, fmtVoltage, headingLabel, timeAgo } from '@/lib/format'
+import { fmtCoord, fmtDateTime, fmtHours, fmtKm, fmtOdometer, fmtVoltage, headingLabel, timeAgo } from '@/lib/format'
 import { useNow } from '@/store/now'
 import { Button, IconButton } from '@/components/ui/Button'
 import { StatusPill } from '@/components/ui/Misc'
@@ -83,7 +91,17 @@ export function DeviceDetail({
   const now = useNow()
   const nav = useNavigate()
   const [rawOpen, setRawOpen] = useState(false)
+  const [sharing, setSharing] = useState(false)
+  const { canManageDevice } = useAccess()
+  const canShare = canManageDevice(device)
   const p = device.position
+  const geo = useAddress(p?.lat, p?.lng)
+  const drivers = useDrivers()
+  const tag = typeof p?.attributes?.driverId === 'string' ? (p.attributes.driverId as string).toLowerCase() : null
+  const driver =
+    (tag ? drivers.data?.find((d) => d.tag && d.tag.toLowerCase() === tag) : undefined) ??
+    (device.driverId != null ? drivers.data?.find((d) => d.id === device.driverId) : undefined) ??
+    drivers.data?.find((d) => d.deviceId === device.id)
   const a = p?.attributes ?? {}
   const m = STATUS_META[device.status] ?? STATUS_META.offline
   const ignition = typeof a.ignition === 'boolean' ? a.ignition : null
@@ -138,7 +156,17 @@ export function DeviceDetail({
         >
           History
         </Button>
+        {canShare && (
+          <Button size="sm" icon={<Share2 className="h-3.5 w-3.5" />} onClick={() => setSharing(true)} className="flex-1">
+            Share
+          </Button>
+        )}
       </div>
+      {canShare && sharing && (
+        <Suspense fallback={null}>
+          <ShareDialog device={device} open={sharing} onClose={() => setSharing(false)} />
+        </Suspense>
+      )}
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
         {!p ? (
@@ -173,6 +201,26 @@ export function DeviceDetail({
               </div>
             </div>
 
+            <div className="mt-3 flex items-center gap-3 rounded-xl border border-slate-200/80 bg-white/60 px-3 py-2 dark:border-white/[0.06] dark:bg-white/[0.025]">
+              <span
+                className={cn(
+                  'grid h-8 w-8 shrink-0 place-items-center rounded-full text-[11px] font-semibold',
+                  driver ? 'bg-navy-700 text-brand-400 dark:bg-white/[0.08] dark:text-brand-300' : 'bg-slate-100 text-slate-400 dark:bg-white/[0.05]',
+                )}
+              >
+                {driver ? driver.name.split(/\s+/).map((x) => x[0]).slice(0, 2).join('').toUpperCase() : <UserRound className="h-4 w-4" />}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="label-xs !text-[10px]">Driver{driver && tag && driver.tag?.toLowerCase() === tag ? ' · identified by tag' : ''}</div>
+                <div className="truncate text-[13px] font-medium text-slate-900 dark:text-white">{driver ? driver.name : <span className="font-normal text-slate-400">No driver assigned</span>}</div>
+              </div>
+              {driver?.phone && (
+                <a href={`tel:${driver.phone.replace(/\s/g, '')}`} className="shrink-0 text-[12px] font-medium text-navy-600 hover:underline dark:text-brand-300">
+                  {driver.phone}
+                </a>
+              )}
+            </div>
+
             <div className="mt-3 grid grid-cols-2 gap-2">
               <Metric
                 icon={<Key />}
@@ -192,7 +240,8 @@ export function DeviceDetail({
                   </span>
                 }
               />
-              <Metric icon={<Milestone />} label="Odometer" value={fmtOdometer(a.odometer)} />
+              <Metric icon={<Milestone />} label="Odometer" value={device.odometer != null ? fmtKm(device.odometer) : fmtOdometer(a.odometer)} />
+              <Metric icon={<Timer />} label="Engine hours" value={fmtHours(device.engineHours)} />
               <Metric icon={<Mountain />} label="Altitude" value={`${Math.round(p.altitude)} m`} />
               <Metric icon={<Clock />} label="Device time" value={new Date(p.time).toLocaleTimeString()} />
             </div>
@@ -202,8 +251,22 @@ export function DeviceDetail({
                 <MapPin className="h-4 w-4 shrink-0 text-slate-400" />
                 <div className="min-w-0 flex-1">
                   <div className="label-xs">Location</div>
-                  <div className="tabular mt-0.5 truncate font-mono text-[12.5px] text-slate-900 dark:text-white">{fmtCoord(p.lat, p.lng)}</div>
-                  <div className="mt-0.5 truncate text-[12px] text-slate-400 dark:text-slate-500">Address lookup not configured</div>
+                  {geo.data?.place && (
+                    <div className="mt-1 inline-flex max-w-full items-center gap-1.5 rounded-full bg-brand-500/12 px-2 py-0.5 text-[11.5px] font-semibold text-navy-700 dark:text-brand-200">
+                      <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: geo.data.place.color || placeMeta(geo.data.place.category).color }} />
+                      <span className="truncate">At {geo.data.place.name}</span>
+                    </div>
+                  )}
+                  {geo.isLoading ? (
+                    <div className="skeleton mt-1 h-4 w-3/4" />
+                  ) : geo.data?.address ? (
+                    <div className="mt-0.5 line-clamp-2 text-[13px] font-medium leading-snug text-slate-900 dark:text-white" title={geo.data.address}>
+                      {geo.data.address}
+                    </div>
+                  ) : null}
+                  <div className={cn('tabular mt-0.5 truncate font-mono', geo.data?.address ? 'text-[11.5px] text-slate-500 dark:text-slate-400' : 'text-[12.5px] text-slate-900 dark:text-white')}>
+                    {fmtCoord(p.lat, p.lng)}
+                  </div>
                 </div>
                 <CopyButton text={fmtCoord(p.lat, p.lng)} label="Copy coordinates" />
               </div>

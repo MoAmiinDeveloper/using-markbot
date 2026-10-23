@@ -6,6 +6,7 @@ import { vehicleIconName } from '@/components/map/icons'
 import { fmtDateTime, fmtTime } from '@/lib/format'
 import { cn } from '@/lib/cn'
 import { sampleAt, type Track } from './track'
+import { SpeedChart } from './SpeedChart'
 
 const SRC = 'playback'
 const RATES = [1, 2, 4, 8, 16, 32]
@@ -119,7 +120,9 @@ export function Playback({ track, seek }: { track: Track; seek: { v: number; n: 
   const pct = track.duration ? (v / track.duration) * 100 : 0
 
   return (
-    <div className="glass pointer-events-auto flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 sm:gap-4 sm:px-4">
+    <div className="glass pointer-events-auto w-full rounded-2xl px-3 pb-2.5 pt-2 sm:px-4">
+    <SpeedChart track={track} v={v} onSeek={setV} className="mb-1.5" />
+    <div className="flex w-full items-center gap-3 sm:gap-4">
       <button
         type="button"
         onClick={() => {
@@ -193,6 +196,7 @@ export function Playback({ track, seek }: { track: Track; seek: { v: number; n: 
           </option>
         ))}
       </select>
+    </div>
     </div>
   )
 }

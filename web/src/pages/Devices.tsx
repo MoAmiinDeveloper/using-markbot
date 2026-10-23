@@ -16,13 +16,18 @@ import { CategoryIcon, categoryMeta } from '@/lib/category'
 import { STATUS_META, STATUSES } from '@/lib/status'
 import { timeAgo } from '@/lib/format'
 import { cn } from '@/lib/cn'
+import { useAccess } from '@/lib/access'
+import { useDrivers, useGroups } from '@/features/common/queries'
+import { GroupChip } from '@/components/ui/Badges'
+import { fmtHours, fmtKm } from '@/lib/format'
+import { Gauge as GaugeIcon, Timer, UserRound } from 'lucide-react'
 
 type SortKey = 'name' | 'status' | 'lastSeen' | 'imei' | 'category'
 const STATUS_ORDER: Record<DeviceStatus, number> = { moving: 0, idle: 1, stopped: 2, offline: 3, never: 4 }
 
-type FormValues = Omit<DeviceInput, 'speedLimit'> & { speedLimit: string }
+type FormValues = Omit<DeviceInput, 'speedLimit' | 'odometer' | 'engineHours'> & { speedLimit: string; odometer: string; engineHours: string }
 
-const EMPTY: FormValues = { name: '', imei: '', protocol: 'teltonika', plate: '', model: '', category: 'car', phone: '', speedLimit: '' }
+const EMPTY: FormValues = { name: '', imei: '', protocol: 'teltonika', plate: '', model: '', category: 'car', phone: '', speedLimit: '', odometer: '', engineHours: '' }
 
 function validate(v: FormValues, bridged: boolean) {
   const e: Partial<Record<keyof FormValues, string>> = {}
@@ -34,6 +39,8 @@ function validate(v: FormValues, bridged: boolean) {
   if (v.speedLimit.trim() && !/^\d{1,3}$/.test(v.speedLimit.trim())) e.speedLimit = 'Enter a whole number of km/h'
   else if (Number(v.speedLimit) > 300) e.speedLimit = 'That’s faster than 300 km/h'
   if (v.phone && !/^\+?[\d\s-]{5,20}$/.test(v.phone.trim())) e.phone = 'Enter a valid phone number'
+  if (v.odometer && !/^\d{1,8}(\.\d*)?$/.test(v.odometer)) e.odometer = 'Kilometres, e.g. 81234'
+  if (v.engineHours && !/^\d{1,6}(\.\d*)?$/.test(v.engineHours)) e.engineHours = 'Hours, e.g. 812.5'
   return e
 }
 
@@ -50,6 +57,8 @@ function DeviceForm({ initial, onClose }: { initial: Device | null; onClose: () 
           category: initial.category || 'other',
           phone: initial.phone,
           speedLimit: initial.speedLimit ? String(initial.speedLimit) : '',
+          odometer: initial.odometer != null ? String(Math.round(initial.odometer)) : '',
+          engineHours: initial.engineHours != null ? String(Math.round(initial.engineHours * 10) / 10) : '',
         }
       : EMPTY,
   )
@@ -63,8 +72,9 @@ function DeviceForm({ initial, onClose }: { initial: Device | null; onClose: () 
 
   const m = useMutation({
     mutationFn: (input: FormValues) => {
+      const { odometer, engineHours, ...rest } = input
       const clean: DeviceInput = {
-        ...input,
+        ...rest,
         speedLimit: input.speedLimit.trim() ? Number(input.speedLimit) : 0,
         name: input.name.trim(),
         imei: input.imei.trim(),
@@ -72,6 +82,11 @@ function DeviceForm({ initial, onClose }: { initial: Device | null; onClose: () 
         model: input.model?.trim(),
         phone: input.phone?.trim(),
       }
+      // only send counters when they were changed (calibration)
+      if (initial && odometer !== '' && Number(odometer) !== Math.round(initial.odometer ?? -1)) clean.odometer = Number(odometer)
+      if (initial && engineHours !== '' && Number(engineHours) !== Math.round((initial.engineHours ?? -1) * 10) / 10) clean.engineHours = Number(engineHours)
+      if (!initial && odometer !== '') clean.odometer = Number(odometer)
+      if (!initial && engineHours !== '') clean.engineHours = Number(engineHours)
       return initial ? api.updateDevice(initial.id, clean) : api.createDevice(clean)
     },
     onSuccess: (d) => {
@@ -197,6 +212,25 @@ function DeviceForm({ initial, onClose }: { initial: Device | null; onClose: () 
             />
           )}
         </Field>
+        <div className="space-y-2 rounded-xl border border-slate-200/80 p-3 dark:border-white/[0.07]">
+          <div>
+            <p className="text-[12.5px] font-medium text-slate-800 dark:text-slate-100">Counters</p>
+            <p className="text-[11.5px] text-slate-500 dark:text-slate-400">Calibrate to match the dashboard — maintenance schedules use these values.</p>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Odometer" error={show('odometer')}>
+              {(id, d) => (
+                <Input id={id} aria-describedby={d} inputMode="decimal" value={v.odometer} invalid={!!show('odometer')} placeholder="0" onChange={(e) => set('odometer', e.target.value.replace(/[^\d.]/g, ''))} trailing={<span className="pr-1.5 text-[11px] text-slate-400">km</span>} />
+              )}
+            </Field>
+            <Field label="Engine hours" error={show('engineHours')}>
+              {(id, d) => (
+                <Input id={id} aria-describedby={d} inputMode="decimal" value={v.engineHours} invalid={!!show('engineHours')} placeholder="0" onChange={(e) => set('engineHours', e.target.value.replace(/[^\d.]/g, ''))} trailing={<span className="pr-1.5 text-[11px] text-slate-400">h</span>} />
+              )}
+            </Field>
+          </div>
+        </div>
+        {initial && <DeviceMeta device={initial} />}
         {initial && (
           <div className="flex items-center justify-between rounded-lg border border-slate-200/80 px-3 py-2 text-[12.5px] dark:border-white/[0.06]">
             <span className="text-slate-500 dark:text-slate-400">Connection</span>
@@ -205,6 +239,22 @@ function DeviceForm({ initial, onClose }: { initial: Device | null; onClose: () 
         )}
       </form>
     </Drawer>
+  )
+}
+
+/** Read-only: groups and current driver are managed under Users & Groups and Drivers. */
+function DeviceMeta({ device }: { device: Device }) {
+  const groups = useGroups()
+  const drivers = useDrivers()
+  const gs = (groups.data ?? []).filter((g) => g.deviceIds.includes(device.id) || device.groupIds?.includes(g.id))
+  const driver = drivers.data?.find((d) => d.id === device.driverId) ?? drivers.data?.find((d) => d.deviceId === device.id)
+  return (
+    <dl className="grid grid-cols-[auto,1fr] items-center gap-x-4 gap-y-2 rounded-lg border border-slate-200/80 px-3 py-2.5 text-[12.5px] dark:border-white/[0.06]">
+      <dt className="text-slate-500 dark:text-slate-400">Groups</dt>
+      <dd className="flex flex-wrap justify-end gap-1">{gs.length ? gs.map((g) => <GroupChip key={g.id} name={g.name} color={g.color} />) : <span className="text-slate-400">None</span>}</dd>
+      <dt className="text-slate-500 dark:text-slate-400">Driver</dt>
+      <dd className="text-right text-slate-900 dark:text-white">{driver?.name ?? <span className="text-slate-400">Not assigned</span>}</dd>
+    </dl>
   )
 }
 
@@ -234,6 +284,10 @@ function SortHeader({
 }
 
 export default function DevicesPage() {
+  const { isAdmin, canManageDevice } = useAccess()
+  const groups = useGroups()
+  const drivers = useDrivers()
+  const [groupId, setGroupId] = useState<number | null>(null)
   const devices = useDeviceList()
   const loaded = useLive((s) => s.loaded)
   const remove = useLive((s) => s.remove)
@@ -256,9 +310,11 @@ export default function DevicesPage() {
 
   const rows = useMemo(() => {
     const s = q.trim().toLowerCase()
+    const g = groups.data?.find((x) => x.id === groupId)
     const list = devices.filter(
       (d) =>
         (status === 'all' || d.status === status) &&
+        (!g || g.deviceIds.includes(d.id) || !!d.groupIds?.includes(g.id)) &&
         (!s ||
           d.name.toLowerCase().includes(s) ||
           d.imei.includes(s) ||
@@ -281,8 +337,10 @@ export default function DevicesPage() {
       }
     }
     return [...list].sort((a, b) => cmp(a, b) * sort.dir)
-  }, [devices, q, status, sort])
+  }, [devices, q, status, sort, groupId, groups.data])
 
+  const groupsOf = (d: Device) => (groups.data ?? []).filter((g) => g.deviceIds.includes(d.id) || !!d.groupIds?.includes(g.id))
+  const driverOf = (d: Device) => drivers.data?.find((x) => x.id === d.driverId) ?? drivers.data?.find((x) => x.deviceId === d.id)
   const onSort = (key: SortKey) => setSort((s) => ({ key, dir: s.key === key ? (s.dir === 1 ? -1 : 1) : 1 }))
 
   return (
@@ -295,9 +353,11 @@ export default function DevicesPage() {
               {loaded ? `${devices.length} tracker${devices.length === 1 ? '' : 's'} registered` : 'Loading…'}
             </p>
           </div>
-          <Button variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setEditing('new')}>
-            Add device
-          </Button>
+          {isAdmin && (
+            <Button variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setEditing('new')}>
+              Add device
+            </Button>
+          )}
         </div>
 
         <div className="card overflow-hidden">
@@ -318,6 +378,16 @@ export default function DevicesPage() {
                 </option>
               ))}
             </Select>
+            {!!groups.data?.length && (
+              <Select value={groupId ?? ''} onChange={(e) => setGroupId(e.target.value ? Number(e.target.value) : null)} aria-label="Filter by group" className="sm:w-44">
+                <option value="">All groups</option>
+                {groups.data.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.name}
+                  </option>
+                ))}
+              </Select>
+            )}
             <span className="text-[12px] text-slate-400 sm:ml-auto">
               {rows.length} of {devices.length}
             </span>
@@ -335,9 +405,11 @@ export default function DevicesPage() {
               title="No devices yet"
               description="Add your first tracker, or simply point it at the server — unknown IMEIs register themselves."
               action={
-                <Button variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setEditing('new')}>
-                  Add device
-                </Button>
+                isAdmin && (
+                  <Button variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setEditing('new')}>
+                    Add device
+                  </Button>
+                )
               }
             />
           ) : rows.length === 0 ? (
@@ -357,7 +429,13 @@ export default function DevicesPage() {
                       </th>
                       <SortHeader k="category" label="Type" sort={sort} onSort={onSort} className="hidden lg:table-cell" />
                       <th scope="col" className="hidden px-4 py-2.5 text-left font-medium xl:table-cell">
-                        Model / SIM
+                        Groups
+                      </th>
+                      <th scope="col" className="hidden px-4 py-2.5 text-left font-medium lg:table-cell">
+                        Driver
+                      </th>
+                      <th scope="col" className="hidden px-4 py-2.5 text-right font-medium lg:table-cell">
+                        Odometer
                       </th>
                       <SortHeader k="lastSeen" label="Last seen" sort={sort} onSort={onSort} />
                       <th scope="col" className="px-4 py-2.5 text-right font-medium">
@@ -387,9 +465,30 @@ export default function DevicesPage() {
                           <SourceBadge source={d.source} />
                         </td>
                         <td className="hidden px-4 py-2.5 text-slate-600 dark:text-slate-300 lg:table-cell">{categoryMeta(d.category).label}</td>
-                        <td className="hidden px-4 py-2.5 xl:table-cell">
-                          <div className="text-slate-700 dark:text-slate-200">{d.model || '—'}</div>
-                          <div className="text-[12px] text-slate-400">{d.phone || '—'}</div>
+                        <td className="hidden max-w-[200px] px-4 py-2.5 xl:table-cell">
+                          <div className="flex flex-wrap gap-1">
+                            {groupsOf(d).length ? groupsOf(d).map((g) => <GroupChip key={g.id} name={g.name} color={g.color} />) : <span className="text-slate-400">—</span>}
+                          </div>
+                        </td>
+                        <td className="hidden max-w-[160px] truncate px-4 py-2.5 text-slate-700 dark:text-slate-200 lg:table-cell">
+                          {driverOf(d) ? (
+                            <span className="inline-flex items-center gap-1.5">
+                              <UserRound className="h-3.5 w-3.5 text-slate-400" />
+                              {driverOf(d)!.name}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )}
+                        </td>
+                        <td className="tabular hidden whitespace-nowrap px-4 py-2.5 text-right lg:table-cell">
+                          <div className="inline-flex items-center gap-1 text-slate-700 dark:text-slate-200">
+                            <GaugeIcon className="h-3 w-3 text-slate-400" />
+                            {fmtKm(d.odometer)}
+                          </div>
+                          <div className="flex items-center justify-end gap-1 text-[12px] text-slate-400">
+                            <Timer className="h-3 w-3" />
+                            {fmtHours(d.engineHours)}
+                          </div>
                         </td>
                         <td className="tabular whitespace-nowrap px-4 py-2.5 text-slate-600 dark:text-slate-300" title={d.lastSeen ?? undefined}>
                           {timeAgo(d.lastSeen, now)}
@@ -402,12 +501,16 @@ export default function DevicesPage() {
                             <IconButton size="sm" label={`History of ${d.name}`} onClick={() => nav(`/history?device=${d.id}`)}>
                               <History className="h-3.5 w-3.5" />
                             </IconButton>
-                            <IconButton size="sm" label={`Edit ${d.name}`} onClick={() => setEditing(d)}>
-                              <Pencil className="h-3.5 w-3.5" />
-                            </IconButton>
-                            <IconButton size="sm" label={`Delete ${d.name}`} onClick={() => setDeleting(d)} className="hover:!bg-rose-500/10 hover:!text-rose-500">
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </IconButton>
+                            {canManageDevice(d) && (
+                              <IconButton size="sm" label={`Edit ${d.name}`} onClick={() => setEditing(d)}>
+                                <Pencil className="h-3.5 w-3.5" />
+                              </IconButton>
+                            )}
+                            {isAdmin && (
+                              <IconButton size="sm" label={`Delete ${d.name}`} onClick={() => setDeleting(d)} className="hover:!bg-rose-500/10 hover:!text-rose-500">
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </IconButton>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -432,13 +535,21 @@ export default function DevicesPage() {
                         {d.imei}
                         {d.plate ? ` · ${d.plate}` : ''}
                       </div>
+                      <div className="tabular mt-0.5 truncate text-[11.5px] text-slate-500 dark:text-slate-400">
+                        {fmtKm(d.odometer)} · {fmtHours(d.engineHours)}
+                        {driverOf(d) ? ` · ${driverOf(d)!.name}` : ''}
+                      </div>
                     </div>
-                    <IconButton size="sm" label={`Edit ${d.name}`} onClick={() => setEditing(d)}>
-                      <Pencil className="h-3.5 w-3.5" />
-                    </IconButton>
-                    <IconButton size="sm" label={`Delete ${d.name}`} onClick={() => setDeleting(d)}>
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </IconButton>
+                    {canManageDevice(d) && (
+                      <IconButton size="sm" label={`Edit ${d.name}`} onClick={() => setEditing(d)}>
+                        <Pencil className="h-3.5 w-3.5" />
+                      </IconButton>
+                    )}
+                    {isAdmin && (
+                      <IconButton size="sm" label={`Delete ${d.name}`} onClick={() => setDeleting(d)}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </IconButton>
+                    )}
                   </li>
                 ))}
               </ul>

@@ -17,6 +17,9 @@ interface UiState {
   mapStyle: MapStyleId
   /** geofence overlay on the Live Map */
   showGeofences: boolean
+  /** places (POI) overlay on the Live Map */
+  showPlaces: boolean
+  togglePlaces: () => void
   toggleTheme: () => void
   toggleGeofences: () => void
   setMapStyle: (s: MapStyleId) => void
@@ -31,6 +34,12 @@ export const useUi = create<UiState>((set, get) => ({
   theme: initialTheme,
   mapStyle: initialStyle,
   showGeofences: readLS('fleet.showGeofences') !== '0',
+  showPlaces: readLS('fleet.showPlaces') === '1',
+  togglePlaces: () => {
+    const showPlaces = !get().showPlaces
+    writeLS('fleet.showPlaces', showPlaces ? '1' : '0')
+    set({ showPlaces })
+  },
   toggleTheme: () => {
     const theme: Theme = get().theme === 'dark' ? 'light' : 'dark'
     writeLS('fleet.theme', theme)

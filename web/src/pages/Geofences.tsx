@@ -33,7 +33,10 @@ import { ShapeEditor, isDraftComplete, type Draft } from '@/features/geofences/S
 import { VehiclePicker } from '@/features/geofences/VehiclePicker'
 import { GEOFENCE_COLORS, geofenceRing, geofenceSize, geofencesBounds } from '@/features/geofences/shape'
 import { useGeofences } from '@/features/geofences/useGeofences'
-import { useAuth } from '@/store/auth'
+import { useAccess } from '@/lib/access'
+import { useSearchParams } from 'react-router-dom'
+import { Segmented } from '@/components/ui/Tabs'
+import { PlacesView } from '@/features/places/PlacesView'
 import { useDeviceList, useLive } from '@/store/live'
 import { toast } from '@/store/toast'
 import { fmtArea, ringArea } from '@/lib/geo'
@@ -179,8 +182,8 @@ function DrawBanner({
   )
 }
 
-export default function GeofencesPage() {
-  const isAdmin = useAuth((s) => s.user?.role === 'admin')
+function GeofencesView({ tabs }: { tabs: ReactNode }) {
+  const isAdmin = useAccess().canManage
   const desktop = useIsDesktop()
   const qc = useQueryClient()
   const devices = useDeviceList()
@@ -339,7 +342,8 @@ export default function GeofencesPage() {
 
             {mode === 'list' && (
               <>
-                <div className="px-4 pb-3 pt-2 md:pt-4">
+                <div className="px-4 pt-2 md:pt-4">{tabs}</div>
+                <div className="px-4 pb-3 pt-3">
                   <div className="flex items-center justify-between gap-2">
                     <div>
                       <h2 className="text-[15px] font-semibold tracking-tight text-slate-900 dark:text-white">Geofences</h2>
@@ -685,3 +689,22 @@ function ShapeSummary({ editor, onDraft, error }: { editor: Editor; onDraft: (d:
   )
 }
 
+
+type GeoTab = 'geofences' | 'places'
+
+export default function GeofencesPage() {
+  const [params, setParams] = useSearchParams()
+  const tab: GeoTab = params.get('tab') === 'places' ? 'places' : 'geofences'
+  const tabs = (
+    <Segmented<GeoTab>
+      label="Geofences or places"
+      value={tab}
+      onChange={(t) => setParams(t === 'places' ? { tab: t } : {}, { replace: true })}
+      options={[
+        { id: 'geofences', label: 'Geofences' },
+        { id: 'places', label: 'Places' },
+      ]}
+    />
+  )
+  return tab === 'places' ? <PlacesView tabs={tabs} /> : <GeofencesView tabs={tabs} />
+}

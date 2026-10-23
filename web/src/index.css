@@ -155,3 +155,17 @@ input[type='range'].scrubber::-moz-range-thumb {
   @apply relative h-4 w-4 rounded-full border-[3px] border-white shadow-lg;
   background: var(--pin);
 }
+.place-pin {
+  @apply pointer-events-auto flex max-w-[190px] items-center gap-1.5 whitespace-nowrap rounded-full border border-slate-200/90 bg-white/95 py-[2px] pl-[2px] pr-2.5 text-[11px] font-semibold text-slate-700 shadow-soft backdrop-blur dark:border-white/10 dark:bg-ink-900/90 dark:text-slate-200;
+}
+.place-pin__dot {
+  @apply grid h-[18px] w-[18px] shrink-0 place-items-center rounded-full text-[9.5px] font-bold;
+  background: var(--pin);
+  color: var(--pin-fg, #fff);
+}
+.place-pin__txt {
+  @apply truncate;
+}
+.place-pin[data-selected] {
+  @apply ring-2 ring-brand-500/70;
+}

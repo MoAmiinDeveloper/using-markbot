@@ -15,7 +15,7 @@ import {
 } from 'lucide-react'
 import { api, ApiError, qk } from '@/api/client'
 import type { Command, CommandType, Device } from '@/api/types'
-import { useAuth } from '@/store/auth'
+import { useAccess } from '@/lib/access'
 import { useNow } from '@/store/now'
 import { toast } from '@/store/toast'
 import { Button } from '@/components/ui/Button'
@@ -190,7 +190,8 @@ function CommandRow({ c, now }: { c: Command; now: number }) {
 }
 
 export function CommandsSection({ device }: { device: Device }) {
-  const isAdmin = useAuth((s) => s.user?.role === 'admin')
+  const { isAdmin, canManageDevice } = useAccess()
+  const readOnly = !canManageDevice(device)
   const qc = useQueryClient()
   const now = useNow()
   const [confirmStop, setConfirmStop] = useState(false)
@@ -223,6 +224,7 @@ export function CommandsSection({ device }: { device: Device }) {
 
   const reason = (t: CommandType): string | undefined => {
     if (bridged) return 'Bridged via Traccar — commands are not supported for this device'
+    if (readOnly) return 'Read-only access — ask a manager to send commands'
     if (ADMIN_ONLY.includes(t) && !isAdmin) return 'Only administrators can send this command'
     return undefined
   }

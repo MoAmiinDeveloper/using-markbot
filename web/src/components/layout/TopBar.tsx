@@ -10,6 +10,7 @@ import { Link } from 'react-router-dom'
 import { APP_NAME } from '@/config'
 import { Logo, LogoMark } from './Logo'
 import { NotificationBell } from './NotificationBell'
+import { RoleBadge } from '@/components/ui/Badges'
 
 function initials(name: string) {
   return (
@@ -57,11 +58,7 @@ export function UserMenu() {
           <div className="px-2.5 py-2">
             <p className="truncate font-medium text-slate-900 dark:text-white">{name}</p>
             <p className="truncate text-[12px] text-slate-500 dark:text-slate-400">{user?.email}</p>
-            {user?.role && (
-              <span className="mt-1.5 inline-block rounded-md bg-brand-500/10 px-1.5 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide text-navy-600 dark:text-brand-300">
-                {user.role}
-              </span>
-            )}
+            {user?.role && <RoleBadge role={user.role} className="mt-1.5" />}
           </div>
           <div className="my-1 h-px bg-slate-200/80 dark:bg-white/[0.07]" />
           <button

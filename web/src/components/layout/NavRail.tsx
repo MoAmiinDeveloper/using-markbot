@@ -2,17 +2,25 @@ import { useEffect, useRef, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { Ellipsis } from 'lucide-react'
 import { cn } from '@/lib/cn'
-import { NAV } from './nav'
+import { SECTION_LABEL, useNav, type NavItem } from './nav'
 
 export function NavRail() {
+  const items = useNav()
   return (
     <nav
       aria-label="Main"
-      className="dark relative z-30 hidden w-[68px] shrink-0 flex-col items-center bg-navy-800 py-3 md:flex"
+      className="dark relative z-30 hidden w-[68px] shrink-0 flex-col items-center overflow-y-auto overflow-x-hidden bg-navy-800 py-3 [scrollbar-width:none] md:flex"
     >
       <ul className="flex flex-1 flex-col items-center gap-1.5">
-        {NAV.map(({ to, label, icon: Icon }) => (
-          <li key={to} className={cn(to === '/settings' && 'mt-auto')}>
+        {items.map(({ to, label, icon: Icon, section }, i) => (
+          <li
+            key={to}
+            className={cn(
+              section === 'system' && items[i - 1]?.section !== 'system' && 'mt-auto pt-3',
+              i > 0 && section !== 'system' && items[i - 1].section !== section &&
+                'relative mt-2 pt-2 before:absolute before:left-1/2 before:top-0 before:h-px before:w-6 before:-translate-x-1/2 before:bg-white/10',
+            )}
+          >
             <NavLink
               to={to}
               aria-label={label}
@@ -48,8 +56,15 @@ export function BottomNav() {
   const [more, setMore] = useState(false)
   const loc = useLocation()
   const ref = useRef<HTMLDivElement>(null)
-  const primary = NAV.filter((n) => n.primary)
-  const rest = NAV.filter((n) => !n.primary)
+  const items = useNav()
+  const primary = items.filter((n) => n.primary)
+  const rest = items.filter((n) => !n.primary)
+  const sections = rest.reduce<Array<{ section: NavItem['section']; items: NavItem[] }>>((acc, n) => {
+    const last = acc[acc.length - 1]
+    if (last?.section === n.section) last.items.push(n)
+    else acc.push({ section: n.section, items: [n] })
+    return acc
+  }, [])
   const inRest = rest.some((n) => loc.pathname.startsWith(n.to))
 
   useEffect(() => setMore(false), [loc.pathname])
@@ -90,24 +105,32 @@ export function BottomNav() {
         More
       </button>
       {more && (
-        <div role="menu" className="absolute bottom-full right-2 mb-2 w-52 animate-slide-up rounded-xl border border-slate-200 bg-white p-1.5 shadow-panel dark:border-white/10 dark:bg-ink-900">
-          {rest.map(({ to, label, icon: Icon }) => (
-            <NavLink
-              key={to}
-              to={to}
-              role="menuitem"
-              className={({ isActive }) =>
-                cn(
-                  'flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13.5px] font-medium',
-                  isActive
-                    ? 'bg-brand-500/10 text-navy-600 dark:text-brand-300'
-                    : 'text-slate-700 hover:bg-slate-900/5 dark:text-slate-200 dark:hover:bg-white/[0.07]',
-                )
-              }
-            >
-              <Icon className="h-[18px] w-[18px]" />
-              {label}
-            </NavLink>
+        <div
+          role="menu"
+          className="absolute bottom-full right-2 mb-2 max-h-[min(70vh,560px)] w-60 animate-slide-up overflow-y-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-panel dark:border-white/10 dark:bg-ink-900"
+        >
+          {sections.map((sec, si) => (
+            <div key={sec.section} className={cn(si > 0 && 'mt-1 border-t border-slate-100 pt-1 dark:border-white/[0.06]')}>
+              <p className="label-xs px-3 pb-1 pt-1.5 !text-[10px]">{SECTION_LABEL[sec.section]}</p>
+              {sec.items.map(({ to, label, icon: Icon }) => (
+                <NavLink
+                  key={to}
+                  to={to}
+                  role="menuitem"
+                  className={({ isActive }) =>
+                    cn(
+                      'flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13.5px] font-medium',
+                      isActive
+                        ? 'bg-brand-500/10 text-navy-600 dark:text-brand-300'
+                        : 'text-slate-700 hover:bg-slate-900/5 dark:text-slate-200 dark:hover:bg-white/[0.07]',
+                    )
+                  }
+                >
+                  <Icon className="h-[18px] w-[18px]" />
+                  {label}
+                </NavLink>
+              ))}
+            </div>
           ))}
         </div>
       )}

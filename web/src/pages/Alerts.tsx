@@ -19,6 +19,9 @@ import { useMedia } from '@/lib/useMedia'
 import { cn } from '@/lib/cn'
 
 type Preset = 'today' | '24h' | '7d' | '30d' | 'custom'
+/** always offered as filter chips; Phase 3 types appear once they occur */
+const CORE_TYPES: string[] = ['geofenceEnter', 'geofenceExit', 'overspeed', 'ignitionOn', 'ignitionOff', 'alarm']
+
 const PRESETS: Array<{ id: Preset; label: string }> = [
   { id: 'today', label: 'Today' },
   { id: '24h', label: '24h' },
@@ -347,7 +350,7 @@ export default function AlertsPage() {
           </div>
           <div role="group" aria-label="Event type" className="-mx-3 flex gap-1.5 overflow-x-auto px-3 pb-0.5">
             <TypeChip active={!type} onClick={() => setParam('type', undefined)} label="All types" />
-            {EVENT_TYPES.map((t) => (
+            {EVENT_TYPES.filter((t) => t === type || CORE_TYPES.includes(t) || (counts[t] ?? 0) > 0).map((t) => (
               <TypeChip
                 key={t}
                 active={type === t}

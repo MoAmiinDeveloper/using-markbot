@@ -1,8 +1,11 @@
-import { useMemo, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { Activity, ArrowRight, CircleParking, Gauge, CirclePause, Truck, WifiOff } from 'lucide-react'
-import { api } from '@/api/client'
+import { Activity, ArrowRight, CircleParking, Gauge, CirclePause, FileClock, Receipt, Truck, WifiOff, Wrench } from 'lucide-react'
+import { api, qk } from '@/api/client'
+import { AlertsByType, DistanceBars, DriverScores, Gauge01, TopVehicles } from '@/features/dashboard/Charts'
+import { Segmented } from '@/components/ui/Tabs'
+import { fmtMoney } from '@/lib/format'
 import type { Device, DeviceStatus, Summary } from '@/api/types'
 import { MapCanvas } from '@/components/map/MapCanvas'
 import { VehicleLayer } from '@/components/map/VehicleLayer'
@@ -131,6 +134,50 @@ function VehicleRow({ d, right, now }: { d: Device; right: ReactNode; now: numbe
   )
 }
 
+function DueCard({
+  icon,
+  title,
+  due,
+  to,
+  loading,
+}: {
+  icon: ReactNode
+  title: string
+  due?: { dueSoon: number; overdue: number }
+  to: string
+  loading: boolean
+}) {
+  const nav = useNavigate()
+  const bad = (due?.overdue ?? 0) > 0
+  const warn = !bad && (due?.dueSoon ?? 0) > 0
+  return (
+    <button
+      type="button"
+      onClick={() => nav(to)}
+      className={cn(
+        'card flex flex-col p-3.5 text-left transition-colors hover:border-slate-300 dark:hover:border-white/15',
+        bad && '!border-rose-500/40',
+        warn && '!border-amber-500/40',
+      )}
+    >
+      <span className="flex items-center gap-2 text-[12.5px] font-medium text-slate-500 dark:text-slate-400 [&>svg]:h-4 [&>svg]:w-4">
+        {icon}
+        {title}
+      </span>
+      {loading ? (
+        <Skeleton className="mt-2 h-7 w-20" />
+      ) : (
+        <span className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+          <span className={cn('tabular text-[24px] font-semibold leading-none', bad ? 'text-rose-600 dark:text-rose-400' : 'text-slate-900 dark:text-white')}>{due?.overdue ?? 0}</span>
+          <span className="mr-1 text-[11.5px] text-slate-500">overdue</span>
+          <span className={cn('tabular text-[16px] font-semibold leading-none', warn ? 'text-amber-600 dark:text-amber-400' : 'text-slate-700 dark:text-slate-200')}>{due?.dueSoon ?? 0}</span>
+          <span className="text-[11.5px] text-slate-500">due soon</span>
+        </span>
+      )}
+    </button>
+  )
+}
+
 function Panel({ title, action, children, className }: { title: string; action?: ReactNode; children: ReactNode; className?: string }) {
   return (
     <section className={cn('card flex flex-col p-4', className)}>
@@ -155,6 +202,10 @@ export default function DashboardPage() {
     return summaryQ.data ?? { total: 0, moving: 0, idle: 0, stopped: 0, offline: 0, never: 0 }
   }, [loaded, devices, summaryQ.data])
   const loading = !loaded && !summaryQ.data
+  const nav = useNavigate()
+  const [days, setDays] = useState<7 | 30>(7)
+  const dash = useQuery({ queryKey: qk.dashboard(days), queryFn: () => api.dashboard(days), meta: { silent: true }, staleTime: 60_000, placeholderData: (p) => p })
+  const dd = dash.data
 
   const fastest = useMemo(
     () => devices.filter((d) => d.status === 'moving' && d.position).sort((a, b) => b.position!.speed - a.position!.speed).slice(0, 6),
@@ -183,8 +234,17 @@ export default function DashboardPage() {
         <div className="flex flex-wrap items-end justify-between gap-2">
           <div>
             <h1 className="text-[20px] font-semibold tracking-tight text-slate-900 dark:text-white">Fleet overview</h1>
-            <p className="text-[13px] text-slate-500 dark:text-slate-400">Live status across all vehicles · updates in real time</p>
+            <p className="text-[13px] text-slate-500 dark:text-slate-400">Live status across all vehicles · trends for the last {days} days</p>
           </div>
+          <Segmented<7 | 30>
+            label="Trend period"
+            value={days}
+            onChange={setDays}
+            options={[
+              { id: 7, label: 'Last 7 days' },
+              { id: 30, label: 'Last 30 days' },
+            ]}
+          />
         </div>
 
         <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 xl:grid-cols-5">
@@ -201,6 +261,40 @@ export default function DashboardPage() {
             </div>
           ))}
         </div>
+
+        {!dash.isError && (
+          <div className="grid gap-4 lg:grid-cols-3">
+            <Panel
+              title="Distance by day"
+              className="lg:col-span-2"
+              action={
+                <Link to="/reports?type=daily" className="inline-flex items-center gap-1 text-[12.5px] font-medium text-navy-600 hover:text-navy-500 dark:text-brand-300">
+                  Daily report <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              }
+            >
+              {dd ? <DistanceBars data={dd.distanceByDay} /> : <Skeleton className="h-[250px] w-full rounded-xl" />}
+            </Panel>
+            <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-rows-[1fr_auto]">
+              <div className="card col-span-2 flex flex-wrap items-center justify-around gap-x-2 gap-y-3 p-4">
+                {dd ? <Gauge01 value={dd.utilization} label="Fleet utilisation" sub="driving time ÷ fleet time" /> : <Skeleton className="h-[110px] w-[150px] rounded-xl" />}
+                <button type="button" onClick={() => nav('/maintenance?tab=expenses')} className="min-w-0 rounded-xl px-2 py-1 text-left hover:bg-slate-900/[0.035] dark:hover:bg-white/[0.04]">
+                  <span className="flex items-center gap-1.5 text-[12.5px] font-medium text-slate-500 dark:text-slate-400">
+                    <Receipt className="h-4 w-4" /> Expenses this month
+                  </span>
+                  {dd ? (
+                    <span className="tabular mt-1 block truncate text-[22px] font-semibold tracking-tight text-slate-900 dark:text-white">{fmtMoney(dd.expenses.total, dd.expenses.currency || 'USD', true)}</span>
+                  ) : (
+                    <Skeleton className="mt-1 h-7 w-24" />
+                  )}
+                  <span className="text-[11.5px] text-navy-600 dark:text-brand-300">View expenses →</span>
+                </button>
+              </div>
+              <DueCard icon={<Wrench />} title="Maintenance" due={dd?.maintenance} to="/maintenance" loading={!dd} />
+              <DueCard icon={<FileClock />} title="Documents" due={dd?.reminders} to="/maintenance?tab=reminders" loading={!dd} />
+            </div>
+          </div>
+        )}
 
         <div className="grid gap-4 lg:grid-cols-3">
           <Panel title="Status breakdown">
@@ -225,6 +319,24 @@ export default function DashboardPage() {
             </div>
           </Panel>
         </div>
+
+        {!dash.isError && (
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <Panel title="Alerts by type" action={<Link to="/alerts" className="text-[12.5px] font-medium text-navy-600 hover:text-navy-500 dark:text-brand-300">All alerts</Link>}>
+              {dd ? <AlertsByType data={dd.alertsByType} onPick={(t) => nav(`/alerts?type=${t}`)} /> : <Skeleton className="h-48 w-full rounded-xl" />}
+            </Panel>
+            <Panel title="Top vehicles by distance" action={<Link to="/reports?type=summary" className="text-[12.5px] font-medium text-navy-600 hover:text-navy-500 dark:text-brand-300">Summary report</Link>}>
+              {dd ? <TopVehicles data={dd.topVehicles} onPick={(id) => nav(`/history?device=${id}`)} /> : <Skeleton className="h-48 w-full rounded-xl" />}
+            </Panel>
+            <Panel title="Driver scores" className="md:col-span-2 xl:col-span-1" action={<Link to="/reports?type=driver" className="text-[12.5px] font-medium text-navy-600 hover:text-navy-500 dark:text-brand-300">Behaviour report</Link>}>
+              {dd ? (
+                <DriverScores data={dd.driverScores} onPick={(id) => nav(id != null ? `/reports?type=driver&driverId=${id}` : '/reports?type=driver')} />
+              ) : (
+                <Skeleton className="h-48 w-full rounded-xl" />
+              )}
+            </Panel>
+          </div>
+        )}
 
         <div className="grid gap-4 lg:grid-cols-2">
           <Panel title="Fastest right now" action={<Gauge className="h-4 w-4 text-slate-400" />}>

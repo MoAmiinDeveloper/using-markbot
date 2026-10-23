@@ -16,6 +16,7 @@ import { useDeviceList } from '@/store/live'
 import { boundsOf } from '@/lib/geo'
 import { fmtDistance, fmtDuration } from '@/lib/format'
 import { useIsDesktop } from '@/lib/useMedia'
+import { useAddress } from '@/lib/geocode'
 import { cn } from '@/lib/cn'
 
 type Preset = 'today' | 'yesterday' | '24h' | '7d' | 'custom'
@@ -58,6 +59,29 @@ function Stat({ icon, label, value }: { icon: React.ReactNode; label: string; va
   )
 }
 
+function Addr({ lat, lng }: { lat: number; lng: number }) {
+  const g = useAddress(lat, lng, 0)
+  if (g.isLoading) return <span className="skeleton inline-block h-3 w-28 align-middle" />
+  const text = g.data?.place?.name ?? g.data?.address
+  return <span className={cn('truncate', g.data?.place && 'font-medium text-slate-700 dark:text-slate-200')}>{text || `${lat.toFixed(4)}, ${lng.toFixed(4)}`}</span>
+}
+
+/** Start → end addresses of a trip (reverse-geocoded through the server, cached). */
+function TripAddresses({ trip }: { trip: Trip }) {
+  return (
+    <div className="mt-1.5 space-y-0.5 pl-7 text-[11.5px] text-slate-500 dark:text-slate-400">
+      <div className="flex min-w-0 items-center gap-1.5">
+        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
+        <Addr lat={trip.startLat} lng={trip.startLng} />
+      </div>
+      <div className="flex min-w-0 items-center gap-1.5">
+        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-rose-500" />
+        <Addr lat={trip.endLat} lng={trip.endLng} />
+      </div>
+    </div>
+  )
+}
+
 function FitTo({ track, trip, tick, desktop }: { track: Track | null; trip: Trip | null; tick: number; desktop: boolean }) {
   const { map } = useMapCtx()
   useEffect(() => {
@@ -85,11 +109,23 @@ export default function HistoryPage() {
   const desktop = useIsDesktop()
   const [params, setParams] = useSearchParams()
   const deviceId = params.get('device') ? Number(params.get('device')) : null
-  const [preset, setPreset] = useState<Preset>('today')
+  // deep link from reports: ?device=&from=&to= (ISO) opens a custom range
+  const linkFrom = params.get('from')
+  const linkTo = params.get('to')
+  const linked = !!linkFrom && !!linkTo && !Number.isNaN(Date.parse(linkFrom)) && !Number.isNaN(Date.parse(linkTo))
+  const [preset, setPreset] = useState<Preset>(linked ? 'custom' : 'today')
   const [custom, setCustom] = useState<[string, string]>(() => {
+    if (linked) return [toLocalInput(new Date(linkFrom!)), toLocalInput(new Date(linkTo!))]
     const [a, b] = presetRange('24h')
     return [toLocalInput(a), toLocalInput(b)]
   })
+  useEffect(() => {
+    if (linked) {
+      setPreset('custom')
+      setCustom([toLocalInput(new Date(linkFrom!)), toLocalInput(new Date(linkTo!))])
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linkFrom, linkTo])
   const [rangeKey, setRangeKey] = useState(0) // bump to recompute "now"-relative presets
   const [trip, setTrip] = useState<Trip | null>(null)
   const [seek, setSeek] = useState<{ v: number; n: number } | null>(null)
@@ -150,7 +186,7 @@ export default function HistoryPage() {
             className={cn(
               'glass pointer-events-auto absolute flex flex-col overflow-hidden rounded-2xl',
               'inset-x-2 top-2 md:inset-x-auto md:bottom-3 md:left-3 md:top-3 md:w-[360px]',
-              'max-h-[calc(100%-120px)] md:max-h-none',
+              'max-h-[calc(100%-200px)] md:max-h-none',
             )}
           >
             <div className="flex items-center justify-between px-4 pt-3.5 md:pt-4">
@@ -185,7 +221,7 @@ export default function HistoryPage() {
                     <Select
                       id={id}
                       value={deviceId ?? ''}
-                      onChange={(e) => setParams({ device: e.target.value }, { replace: true })}
+                      onChange={(e) => setParams(linked ? { device: e.target.value, from: linkFrom!, to: linkTo! } : { device: e.target.value }, { replace: true })}
                     >
                       {deviceId == null && <option value="">Select a vehicle…</option>}
                       {devices.map((d) => (
@@ -343,6 +379,7 @@ export default function HistoryPage() {
                                   ) : null}
                                   <span className="tabular ml-auto text-slate-500 dark:text-slate-400">{fmtDuration(t.duration)}</span>
                                 </div>
+                                <TripAddresses trip={t} />
                                 <div className="tabular mt-1 flex gap-3 pl-7 text-[11.5px] text-slate-500 dark:text-slate-400">
                                   <span>{fmtDistance(t.distance)}</span>
                                   <span>max {Math.round(t.maxSpeed)} km/h</span>
@@ -361,7 +398,7 @@ export default function HistoryPage() {
             </div>
           </aside>
 
-          <MapControls className="absolute bottom-[104px] right-2 md:bottom-auto md:right-3 md:top-3" />
+          <MapControls className="absolute bottom-[184px] right-2 md:bottom-auto md:right-3 md:top-3" />
 
           {track && track.positions.length > 1 && (
             <div className="absolute inset-x-2 bottom-2 md:bottom-4 md:left-[384px] md:right-16 lg:left-[400px] lg:right-auto lg:w-[min(720px,calc(100%-480px))]">

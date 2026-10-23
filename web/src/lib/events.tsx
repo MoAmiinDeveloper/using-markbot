@@ -1,4 +1,19 @@
-import { Gauge, Key, LogIn, LogOut, PowerOff, Siren, Terminal, type LucideIcon } from 'lucide-react'
+import {
+  ChevronsDown,
+  ChevronsUp,
+  CornerUpRight,
+  FileClock,
+  Gauge,
+  Hourglass,
+  Key,
+  LogIn,
+  LogOut,
+  PowerOff,
+  Siren,
+  Terminal,
+  Wrench,
+  type LucideIcon,
+} from 'lucide-react'
 import type { CommandStatus, CommandType, EventType, FleetEvent } from '@/api/types'
 import { fmtSpeed } from './format'
 
@@ -69,6 +84,60 @@ export const EVENT_META: Record<EventType, EventMeta> = {
     chip: 'bg-rose-500/15 text-rose-600 dark:text-rose-400',
     pill: 'bg-rose-500/15 text-rose-700 ring-rose-500/30 dark:text-rose-300',
   },
+  harshAcceleration: {
+    label: 'Harsh acceleration',
+    short: 'Harsh accel.',
+    description: 'Aggressive acceleration detected by the tracker',
+    icon: ChevronsUp,
+    color: '#ec4899',
+    chip: 'bg-pink-500/12 text-pink-600 dark:text-pink-400',
+    pill: 'bg-pink-500/12 text-pink-700 ring-pink-500/25 dark:text-pink-300',
+  },
+  harshBraking: {
+    label: 'Harsh braking',
+    short: 'Harsh braking',
+    description: 'Sudden, hard braking',
+    icon: ChevronsDown,
+    color: '#d946ef',
+    chip: 'bg-fuchsia-500/12 text-fuchsia-600 dark:text-fuchsia-400',
+    pill: 'bg-fuchsia-500/12 text-fuchsia-700 ring-fuchsia-500/25 dark:text-fuchsia-300',
+  },
+  harshCornering: {
+    label: 'Harsh cornering',
+    short: 'Harsh cornering',
+    description: 'Taking a corner too fast',
+    icon: CornerUpRight,
+    color: '#a855f7',
+    chip: 'bg-purple-500/12 text-purple-600 dark:text-purple-400',
+    pill: 'bg-purple-500/12 text-purple-700 ring-purple-500/25 dark:text-purple-300',
+  },
+  idle: {
+    label: 'Excessive idle',
+    short: 'Idle',
+    description: 'Engine running while stationary longer than the idle limit',
+    icon: Hourglass,
+    color: '#f59e0b',
+    chip: 'bg-amber-500/12 text-amber-600 dark:text-amber-400',
+    pill: 'bg-amber-500/12 text-amber-700 ring-amber-500/25 dark:text-amber-300',
+  },
+  maintenanceDue: {
+    label: 'Maintenance due',
+    short: 'Maintenance',
+    description: 'A service schedule is due soon or overdue',
+    icon: Wrench,
+    color: '#14b8a6',
+    chip: 'bg-teal-500/12 text-teal-600 dark:text-teal-400',
+    pill: 'bg-teal-500/12 text-teal-700 ring-teal-500/25 dark:text-teal-300',
+  },
+  documentExpiry: {
+    label: 'Document expiry',
+    short: 'Documents',
+    description: 'Insurance, registration or a licence is about to expire',
+    icon: FileClock,
+    color: '#6366f1',
+    chip: 'bg-indigo-500/12 text-indigo-600 dark:text-indigo-400',
+    pill: 'bg-indigo-500/12 text-indigo-700 ring-indigo-500/25 dark:text-indigo-300',
+  },
   commandResult: {
     label: 'Command result',
     short: 'Command',
@@ -109,6 +178,18 @@ export function eventDetail(e: FleetEvent): string | null {
       return typeof a.geofenceName === 'string' ? a.geofenceName : null
     case 'alarm':
       return alarmLabel(a.alarm)
+    case 'idle':
+      return typeof a.minutes === 'number' ? `Idling ${Math.round(a.minutes)} min` : null
+    case 'harshAcceleration':
+    case 'harshBraking':
+    case 'harshCornering':
+      return typeof a.speed === 'number' ? `at ${fmtSpeed(a.speed)}` : null
+    case 'maintenanceDue':
+    case 'documentExpiry': {
+      const name = typeof a.name === 'string' ? a.name : null
+      const st = a.status === 'overdue' ? 'Overdue' : a.status === 'dueSoon' ? 'Due soon' : null
+      return [name, st].filter(Boolean).join(' · ') || null
+    }
     default:
       return null
   }
