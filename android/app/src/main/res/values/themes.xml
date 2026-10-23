@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Window theme only; all UI colours come from the Compose Material 3 theme (ui/theme/Theme.kt). -->
+    <style name="Theme.SomtelDriver" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/window_background</item>
+        <item name="android:colorPrimary">@color/somtel_navy</item>
+        <item name="android:colorAccent">@color/somtel_gold</item>
+        <item name="android:statusBarColor">@color/somtel_navy</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+</resources>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.SomtelDriver" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/somtel_navy_dark</item>
+        <item name="android:colorPrimary">@color/somtel_navy</item>
+        <item name="android:colorAccent">@color/somtel_gold</item>
+        <item name="android:statusBarColor">@color/somtel_navy_dark</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+</resources>

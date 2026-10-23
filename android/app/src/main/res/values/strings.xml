@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Somtel Driver</string>
+
+    <!-- Login -->
+    <string name="login_subtitle">Somtel Fleet · driver app</string>
+    <string name="login_server_url">Server URL</string>
+    <string name="login_server_url_hint">https://fleet.example.com</string>
+    <string name="login_invalid_url">Enter a valid address, e.g. https://fleet.example.com or http://192.168.1.10:8080</string>
+    <string name="login_cleartext_warning">Unencrypted http:// — use only on a trusted local network.</string>
+    <string name="login_email">Email</string>
+    <string name="login_password">Password</string>
+    <string name="login_button">Sign in</string>
+    <string name="error_role_not_allowed">This account is not a driver account. Ask your fleet manager to create a driver login for you.</string>
+
+    <!-- Errors -->
+    <string name="error_network">Cannot reach the server. Check your connection and the server address.</string>
+    <string name="error_unauthorized">Your session has expired. Please sign in again.</string>
+    <string name="error_forbidden">You are not allowed to do this.</string>
+    <string name="error_not_found">Not found. It may have been removed or reassigned.</string>
+    <string name="error_conflict">This change is no longer possible (the job was updated elsewhere).</string>
+    <string name="error_validation">The server rejected the request.</string>
+    <string name="error_too_large">The file is too large (max 10 MB).</string>
+    <string name="error_server">Server error. Please try again later.</string>
+    <string name="error_unknown">Something went wrong.</string>
+    <string name="error_no_camera">No camera app is available on this device.</string>
+    <string name="error_photo_failed">The photo could not be processed. Please try again.</string>
+
+    <!-- Jobs list -->
+    <string name="jobs_title">My jobs</string>
+    <string name="jobs_tab_active">Active (%1$d)</string>
+    <string name="jobs_tab_history">History</string>
+    <string name="jobs_empty_active">No active jobs. Pull down to refresh.</string>
+    <string name="jobs_empty_history">No completed jobs yet.</string>
+    <string name="jobs_refresh_failed">Could not refresh: %1$s</string>
+    <string name="job_customer">Customer: %1$s</string>
+    <string name="job_due">Due %1$s</string>
+    <string name="job_due_late">Late · due %1$s</string>
+    <string name="job_scheduled">Scheduled %1$s</string>
+    <string name="job_stops_progress">%1$d/%2$d stops</string>
+    <string name="job_failure_reason">Problem reported: %1$s</string>
+    <string name="job_loading">Loading job…</string>
+    <string name="job_title_fallback">Job</string>
+
+    <!-- Sync -->
+    <string name="pending_sync">Pending sync</string>
+    <string name="pending_sync_count">%1$d pending sync</string>
+    <string name="pending_sync_banner">%1$d change(s) waiting to sync. They will be sent automatically when you are online.</string>
+    <string name="sync_rejected">A change was rejected by the server: %1$s</string>
+
+    <!-- Status -->
+    <string name="status_unassigned">Unassigned</string>
+    <string name="status_assigned">Assigned</string>
+    <string name="status_accepted">Accepted</string>
+    <string name="status_en_route">En route</string>
+    <string name="status_arrived">Arrived</string>
+    <string name="status_in_progress">In progress</string>
+    <string name="status_completed">Completed</string>
+    <string name="status_failed">Failed</string>
+    <string name="status_cancelled">Cancelled</string>
+
+    <string name="priority_normal">Normal</string>
+    <string name="priority_high">High</string>
+    <string name="priority_urgent">Urgent</string>
+
+    <!-- Job actions -->
+    <string name="action_accept">Accept job</string>
+    <string name="action_start_trip">Start trip</string>
+    <string name="action_arrived">I have arrived</string>
+    <string name="action_start_work">Start work</string>
+    <string name="action_complete">Complete job</string>
+    <string name="action_report_problem">Report problem</string>
+    <string name="complete_blocked">Tick %1$d required checklist item(s) before completing.</string>
+    <string name="action_call_customer">Call</string>
+    <string name="action_navigate">Navigate</string>
+    <string name="action_back">Back</string>
+    <string name="action_refresh">Refresh</string>
+    <string name="action_dismiss">Dismiss</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_logout">Log out</string>
+
+    <!-- Stops -->
+    <string name="section_stops">Stops</string>
+    <string name="stop_fallback_name">Stop %1$d</string>
+    <string name="stop_pending">Pending</string>
+    <string name="stop_arrived">Arrived</string>
+    <string name="stop_completed">Completed</string>
+    <string name="stop_skipped">Skipped</string>
+    <string name="action_stop_arrived">Arrived</string>
+    <string name="action_stop_completed">Completed</string>
+    <string name="action_stop_skip">Skip</string>
+
+    <!-- Checklist / notes -->
+    <string name="section_checklist">Checklist</string>
+    <string name="checklist_required">Required</string>
+    <string name="section_notes">Notes</string>
+    <string name="notes_empty">No notes yet.</string>
+    <string name="notes_add_hint">Add a note</string>
+    <string name="notes_add">Add note</string>
+
+    <!-- Attachments -->
+    <string name="section_attachments">Photos &amp; signature</string>
+    <string name="action_take_photo">Take photo</string>
+    <string name="action_signature">Signature</string>
+    <string name="attachments_empty">No photos or signatures yet.</string>
+    <string name="attachment_photo">Photo</string>
+    <string name="attachment_signature">Signature</string>
+    <string name="attachment_document">Document</string>
+    <string name="attachment_pending">Uploading</string>
+
+    <!-- Report problem -->
+    <string name="problem_title">Report a problem</string>
+    <string name="problem_message">The job will be marked as failed and dispatch will be notified.</string>
+    <string name="problem_reason">What happened?</string>
+    <string name="problem_confirm">Mark as failed</string>
+
+    <!-- Signature -->
+    <string name="signature_title">Customer signature</string>
+    <string name="signature_hint">Ask the customer to sign inside the box.</string>
+    <string name="signature_undo">Undo</string>
+    <string name="signature_clear">Clear</string>
+    <string name="signature_save">Save signature</string>
+
+    <!-- Profile / settings -->
+    <string name="profile_title">Profile &amp; settings</string>
+    <string name="profile_role">Role: %1$s</string>
+    <string name="profile_server">Server: %1$s</string>
+    <string name="profile_vehicle">Vehicle: %1$s</string>
+    <string name="profile_no_vehicle">No vehicle assigned</string>
+    <string name="profile_version">Somtel Driver %1$s</string>
+    <string name="location_share">Share my location</string>
+    <string name="location_explanation">While a job is in progress, your phone\'s GPS position is sent to dispatch every 15 seconds. A notification is shown while sharing is on. Location access is only needed while the app or this notification is active; background location permission is not required.</string>
+    <string name="location_permission_denied">Location permission was denied. Enable it in system settings to share your location.</string>
+    <string name="logout_title">Log out?</string>
+    <string name="logout_message">You will need your email and password to sign in again.</string>
+    <string name="logout_message_pending">%1$d change(s) have not been sent yet and will be lost if you log out now.</string>
+
+    <!-- Notifications -->
+    <string name="channel_jobs">Job assignments</string>
+    <string name="channel_jobs_description">Alerts when a new job is assigned to you</string>
+    <string name="channel_location">Location sharing</string>
+    <string name="channel_location_description">Shown while your location is being shared</string>
+    <string name="notification_new_job_title">New job assigned: %1$s</string>
+    <string name="location_notification_title">Sharing your location</string>
+    <string name="location_notification_text">Dispatch sees your position while a job is in progress.</string>
+</resources>

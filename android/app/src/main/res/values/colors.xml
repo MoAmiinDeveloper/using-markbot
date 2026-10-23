@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="somtel_gold">#FFFFD700</color>
+    <color name="somtel_navy">#FF222D5D</color>
+    <color name="somtel_navy_dark">#FF0E1330</color>
+    <color name="ic_launcher_background">#FF222D5D</color>
+    <color name="window_background">#FFF5F6FA</color>
+</resources>

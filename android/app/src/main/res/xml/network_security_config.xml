@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The server URL is entered by the driver at login and may be a LAN address such as
+  http://192.168.1.10:8080 during testing, so cleartext HTTP is permitted. Production servers
+  should use https:// (the login screen warns when http:// is used).
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
