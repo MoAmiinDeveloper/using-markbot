@@ -11,6 +11,10 @@ vendors plug in through a single `protocol.Protocol` interface.
 
 Docs: [architecture & roadmap](docs/ARCHITECTURE.md) · [API contract](docs/API.md)
 
+## Cloud server (real devices)
+
+One command on a fresh Ubuntu server — see [docs/DEPLOY.md](docs/DEPLOY.md).
+
 ## Quick start (Docker)
 
 ```sh
