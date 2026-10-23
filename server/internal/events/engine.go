@@ -42,6 +42,7 @@ type Engine struct {
 	st     Store
 	notify Notifier
 	log    *slog.Logger
+	rules  []Rule
 
 	mu      sync.Mutex
 	devices map[int64]*state
@@ -63,6 +64,17 @@ type state struct {
 	idleActive  bool           // in an idle period
 	idleFired   bool           // idle event already raised for this period
 }
+
+// Rule is a pluggable event rule (route deviation, sensors, …). Eval is
+// called for every new fix of a device in device-time order, after the
+// built-in rules, and must keep any per-device state itself. It is never
+// called for fixes replayed from before a restart.
+type Rule interface {
+	Eval(ctx context.Context, dev *store.Device, p *domain.Position) []store.Event
+}
+
+// AddRule registers an extra rule. Call before positions start flowing.
+func (e *Engine) AddRule(r Rule) { e.rules = append(e.rules, r) }
 
 // New returns an engine; notify may be nil.
 func New(st Store, notify Notifier, log *slog.Logger) *Engine {
@@ -147,6 +159,9 @@ func (e *Engine) processDevice(ctx context.Context, id int64, ps []domain.Positi
 	var evs []store.Event
 	for i := range ps {
 		evs = append(evs, evaluate(&dev, cfg, fences, s, &ps[i])...)
+		for _, r := range e.rules {
+			evs = append(evs, r.Eval(ctx, &dev, &ps[i])...)
+		}
 	}
 	e.Emit(ctx, dev.Name, evs...)
 }

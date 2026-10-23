@@ -115,6 +115,9 @@ func (s *Server) routes() http.Handler {
 				// Phase 3 modules register their own routes (incl. their own role checks).
 				s.mountAnalytics(r)
 				s.mountManagement(r)
+				// Phase 4a modules.
+				s.mountDispatch(r)
+				s.mountAutomation(r)
 
 				// Managers: only devices / geofences within their groups (checked inside).
 				r.Group(func(r chi.Router) {

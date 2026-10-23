@@ -538,3 +538,149 @@ Driver score: `100 − (overspeeds×5 + harsh×3 + idleHours×2)` per 100 km dri
 - **Settings.** `currency`: 3-letter code (upper-cased); `idleAlertMinutes`: whole number 0–1440.
 - **Env.** `GEOCODER=nominatim|off` (default nominatim), `GEOCODER_URL` (default
   `https://nominatim.openstreetmap.org`), User-Agent `SomtelFleet/1.0`.
+
+---
+
+# Phase 4a additions — dispatch, routes, scheduled reports, sensors, driver app
+
+Ownership (parallel work):
+**dispatch module** = jobs, driver role + driver-app (`/driver/*`) API, file uploads, routes & deviation
+(`api/dispatch_routes.go`, migration `0005_*`, event rule in its own file via `events.Engine.AddRule`).
+**automation module** = scheduled reports, SMTP email, Telegram documents, sensors & calibration,
+fuel/temperature reports, registering ALL new event types in notification prefs, simulator sensor IO
+(`api/automation_routes.go`, migration `0006_*`, its own `events` rule).
+
+## Driver role & accounts
+New `User.role` value **`driver`**. A driver user is linked to a Driver record: `Driver` gains
+`"userId": null|5`. Drivers can only use `/auth/login`, `/me`, `PATCH /me` and `/driver/*`
+(everything else → 403). Admin/manager create driver logins with
+`POST /drivers/{id}/account {email, password}` → `User` (`DELETE` removes it).
+
+## Jobs (dispatch)
+
+```jsonc
+Job = {
+  "id": 101, "reference": "JOB-000101",          // server-generated
+  "title": "Deliver 40 cartons", "description": "", "priority": "normal|high|urgent",
+  "status": "unassigned|assigned|accepted|enRoute|arrived|inProgress|completed|failed|cancelled",
+  "deviceId": 4|null, "driverId": 2|null,
+  "customerName": "", "customerPhone": "",
+  "scheduledStart": "2026-10-24T06:00:00Z"|null, "dueBy": "..."|null,
+  "stops": [ {                                    // ordered; at least one
+     "id": 1, "seq": 1, "name": "Warehouse", "address": "", "lat": 2.04, "lng": 45.31, "radius": 150,
+     "status": "pending|arrived|completed|skipped",
+     "arrivedAt": null, "departedAt": null, "completedAt": null, "notes": "" } ],
+  "checklist": [ { "id": 1, "text": "Check seal", "required": true, "done": false, "doneAt": null } ],
+  "attachments": [ { "id": 9, "kind": "photo|signature|document", "stopId": 1|null,
+                     "url": "/api/v1/files/9", "name": "pod.jpg", "createdAt": "..." } ],
+  "notes": "", "failureReason": "",
+  "createdBy": 1, "createdAt": "...", "updatedAt": "...", "completedAt": null,
+  "routeId": null|3                               // optional planned route (see Routes)
+}
+JobEvent = { "id", "jobId", "time", "userId"|null, "kind": "created|assigned|status|stopArrived|stopDeparted|stopCompleted|checklist|attachment|note", "data": {} }
+```
+Automatic stop tracking: when the job's vehicle (or, if none, the driver's assigned vehicle) is
+within a stop's `radius`, the stop becomes `arrived` (and the job `arrived` if it was `enRoute`/
+`accepted`); leaving the radius sets `departedAt`. Late detection: a job not `completed` by `dueBy`
+emits event `jobLate` once.
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/jobs?status=&deviceId=&driverId=&from=&to=&q=` | `Job[]` (scoped; from/to filter scheduledStart or createdAt) |
+| POST | `/jobs` | admin/manager → 201 |
+| GET / PATCH / DELETE | `/jobs/{id}` | PATCH any editable field incl. stops/checklist (admin/manager) |
+| POST | `/jobs/{id}/status` | `{status, reason?}` — valid transitions only (409 otherwise) |
+| GET | `/jobs/{id}/timeline` | `JobEvent[]` |
+| POST | `/jobs/{id}/attachments` | multipart `file` + `kind` + `stopId?` (≤ 10 MB, jpeg/png/webp/pdf) → `Attachment` |
+| GET | `/files/{id}` | download (auth; drivers only their jobs' files) |
+
+WebSocket: `{"type": "job", "data": Job}` on every change (scoped by vehicle; unassigned-vehicle jobs → admins/managers).
+
+Events: `jobAssigned`, `jobStatus` (attributes `{jobId, reference, status}`), `jobStopArrived`, `jobLate`.
+
+## Driver app API (`/driver/*`, role `driver`, also usable by admins for testing)
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/driver/me` | `{user, driver, vehicle: Device|null}` |
+| GET | `/driver/jobs?status=active|history` | the driver's jobs (active = not completed/failed/cancelled) |
+| GET | `/driver/jobs/{id}` | `Job` |
+| POST | `/driver/jobs/{id}/status` | `{status, reason?, lat?, lng?}` — driver transitions: assigned→accepted→enRoute→arrived→inProgress→completed\|failed |
+| POST | `/driver/jobs/{id}/stops/{stopId}` | `{status: "arrived|completed|skipped", notes?, lat?, lng?}` |
+| POST | `/driver/jobs/{id}/checklist/{itemId}` | `{done: true}` |
+| POST | `/driver/jobs/{id}/attachments` | multipart as above (photo / signature PNG) |
+| POST | `/driver/jobs/{id}/notes` | `{text}` |
+| POST | `/driver/location` | `{lat, lng, speed?, course?, accuracy?, time?}` — optional phone GPS; stored as positions of a device with `protocol: "driverapp"` (IMEI `DRV<driverId>`), only when the driver has no vehicle or the setting `driverAppTracking` is on |
+| GET | `/driver/updates?since=<RFC3339>` | jobs changed since `since` → `{jobs: Job[], now}` (polling fallback; WS also works with the driver token) |
+
+`/auth/login` response for a driver includes `"user.role": "driver"`.
+
+## Routes (path management) & deviation
+
+```jsonc
+Route = { "id": 3, "name": "Mogadishu → Afgooye", "color": "#ffd700",
+          "path": [[lng, lat], ...],             // ≥ 2 points
+          "corridor": 200,                       // meters each side
+          "deviceIds": [],                        // vehicles monitored on this route ([] = none unless used by a job)
+          "minDeviationSeconds": 60, "createdAt": "..." }
+```
+`GET/POST /routes`, `GET/PATCH/DELETE /routes/{id}` (admin/manager).
+`POST /routes/from-trip {deviceId, from, to, name}` → creates a Route from recorded positions
+(simplified with Douglas-Peucker ~20 m). A device is monitored on a route if listed in
+`deviceIds`, or if it has an active job with that `routeId`.
+Deviation: distance from the polyline > `corridor` for ≥ `minDeviationSeconds` → event
+`routeDeviation` once; returning inside the corridor → `routeReturn`.
+
+## Scheduled reports
+
+```jsonc
+ReportSchedule = { "id", "name": "Daily summary", "reportType": "summary",   // any Phase 3 report type
+  "filters": { "deviceIds": [], "groupId": null, "driverId": null },
+  "period": "yesterday|today|lastWeek|thisWeek|lastMonth|thisMonth",
+  "frequency": "daily|weekly|monthly", "hour": 7, "weekday": 1, "monthDay": 1, "timezone": "Africa/Mogadishu",
+  "format": "pdf|xlsx|csv",
+  "telegramUserIds": [1], "emails": ["ops@example.com"],
+  "enabled": true, "lastRunAt": null, "lastStatus": "ok|error|null", "lastError": "", "nextRunAt": "..." }
+```
+`GET/POST /report-schedules`, `PATCH/DELETE /report-schedules/{id}` (admin/manager; the report
+is generated with the creator's access scope), `POST /report-schedules/{id}/run` (send now),
+`GET /report-schedules/{id}/runs` → `[{time, status, error, recipients}]`.
+Telegram delivery uses `sendDocument` to each listed user's linked chat.
+
+## Email (SMTP)
+`Settings` gains `"smtp": { "host", "port": 587, "username", "password": "" /*write-only*/,
+"from": "Somtel Fleet <fleet@example.com>", "tls": "starttls|tls|none", "configured": true }`.
+`POST /settings/smtp/test {to}` sends a test email. Email is also a notification channel:
+`NotificationPrefs.events[*]` gains `"email": false` (default off) and users have `email` addresses.
+
+## Sensors
+
+```jsonc
+Sensor = { "id", "deviceId", "name": "Fuel tank", "type": "fuel|temperature|humidity|voltage|generic",
+  "source": "io9",                 // position attribute key: io<ID>, fuel, power, temp1 …
+  "calibration": [[0, 0], [4500, 120]],   // [raw, value] points, linear interpolation; [] = use multiplier/offset
+  "multiplier": 1, "offset": 0, "unit": "L|°C|%|V|",
+  "decimals": 1, "min": null, "max": null,          // alert thresholds (temperature/humidity/generic)
+  "tankCapacity": 120,                              // fuel only
+  "fuelDropThreshold": 8, "fuelFillThreshold": 10,  // liters; drain/refuel detection
+  "smoothing": 5,                                   // median window (fixes) to remove slosh noise
+  "createdAt" }
+```
+`GET /sensors?deviceId=`, `POST /sensors`, `PATCH/DELETE /sensors/{id}` (admin/manager).
+`Device` gains `"sensors": [ { "id", "name", "type", "value": 87.4, "unit": "L", "time": "..." } ]`
+(latest computed values) and Position responses gain `"sensors": { "<sensorId>": value }` when
+`?sensors=1` is passed to `/devices/{id}/positions`.
+Events: `fuelDrain` (drop ≥ threshold while stopped/ignition off, attributes `{sensorId, liters,
+before, after}`), `refuel` (`{liters}`), `sensorHigh` / `sensorLow` (`{sensorId, value, limit}`,
+once per excursion).
+New reports (Phase 3 report system): `fuel` (per device: start/end level, consumed, refuels count+L,
+drains count+L, L/100 km) and `temperature` (per sensor: min/avg/max, minutes out of range, excursions).
+Teltonika hints for the UI: `io9` AIN1 (mV), `io72`–`io75` Dallas temperature (×0.1 °C → use
+multiplier 0.1), `io201`/`io203` LLS fuel level, `io25`–`io28` BLE temperature (×0.01 °C).
+
+## Settings additions
+`driverAppTracking: false`, `smtp: {...}`.
+
+## New event types (all registered in NotificationPrefs by the automation module)
+`jobAssigned`, `jobStatus`, `jobStopArrived`, `jobLate`, `routeDeviation`, `routeReturn`,
+`fuelDrain`, `refuel`, `sensorHigh`, `sensorLow`.
