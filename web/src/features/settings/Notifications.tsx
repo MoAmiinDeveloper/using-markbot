@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useEffect, useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Bell, BellRing, CircleCheck, ExternalLink, LoaderCircle, MonitorSmartphone, Send, Smartphone, Unlink } from 'lucide-react'
+import { Bell, BellRing, CircleCheck, ExternalLink, LoaderCircle, Mail, MonitorSmartphone, Send, Smartphone, Unlink } from 'lucide-react'
+import { useAuth } from '@/store/auth'
 import { api, ApiError, qk } from '@/api/client'
 import type { Channel, ChannelPrefs, NotificationPrefs, NotifyEventType, Settings } from '@/api/types'
 import { Button } from '@/components/ui/Button'
@@ -19,12 +20,15 @@ const GROUPS: Array<{ label: string; types: NotifyEventType[] }> = [
   { label: 'Zones & trips', types: ['geofenceEnter', 'geofenceExit', 'ignitionOn', 'ignitionOff'] },
   { label: 'Safety & driving', types: ['alarm', 'overspeed', 'harshAcceleration', 'harshBraking', 'harshCornering', 'idle'] },
   { label: 'Fleet operations', types: ['maintenanceDue', 'documentExpiry'] },
+  { label: 'Dispatch', types: ['jobAssigned', 'jobStatus', 'jobStopArrived', 'jobLate'] },
+  { label: 'Routes', types: ['routeDeviation', 'routeReturn'] },
+  { label: 'Sensors & fuel', types: ['fuelDrain', 'refuel', 'sensorHigh', 'sensorLow'] },
 ]
 
 /** Server defaults for keys an older server may not return yet. */
 function defaultChannels(t: NotifyEventType): ChannelPrefs {
-  const quiet = t === 'idle' || t.startsWith('harsh')
-  return { inApp: true, telegram: !quiet, push: !quiet }
+  const quiet = t === 'idle' || t.startsWith('harsh') || t === 'jobStopArrived' || t === 'routeReturn' || t === 'refuel' || t === 'jobStatus'
+  return { inApp: true, telegram: !quiet, push: !quiet, email: false }
 }
 
 function TelegramIcon({ className }: { className?: string }) {
@@ -245,17 +249,20 @@ export function NotificationsSection({ settings }: { settings: Settings | undefi
   const tgConfigured = settings?.telegramConfigured ?? true
   const pushAny = !!p?.push?.enabled
 
-  const prefOf = (t: NotifyEventType): ChannelPrefs => p?.events[t] ?? defaultChannels(t)
+  const myEmail = useAuth((x) => x.user?.email)
+  const smtpOk = !!settings?.smtp?.configured
+  const prefOf = (t: NotifyEventType): ChannelPrefs => ({ ...defaultChannels(t), ...(p?.events[t] ?? {}) })
   const toggle = (type: NotifyEventType, ch: Channel, v: boolean) => {
     if (!p) return
     const events = { ...p.events, [type]: { ...prefOf(type), [ch]: v } }
     save.mutate(events)
   }
 
-  const columns: Array<{ ch: Channel; label: string; disabled: boolean; why?: string }> = [
-    { ch: 'inApp', label: 'In-app', disabled: false },
-    { ch: 'telegram', label: 'Telegram', disabled: !tgLinked, why: 'Connect Telegram first' },
+  const columns: Array<{ ch: Channel; label: string; short?: string; disabled: boolean; why?: string }> = [
+    { ch: 'inApp', label: 'In-app', short: 'App', disabled: false },
+    { ch: 'telegram', label: 'Telegram', short: 'TG', disabled: !tgLinked, why: 'Connect Telegram first' },
     { ch: 'push', label: 'Push', disabled: !pushAny, why: 'Enable push on a device first' },
+    { ch: 'email', label: 'Email', disabled: !smtpOk || !myEmail, why: !smtpOk ? 'An admin must configure SMTP first' : 'Your account has no email address' },
   ]
 
   return (
@@ -278,7 +285,7 @@ export function NotificationsSection({ settings }: { settings: Settings | undefi
         <p className="text-[12.5px] text-slate-500">Notification settings are unavailable on this server.</p>
       ) : (
         <div className="space-y-5">
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <ChannelTile icon={<BellRing className="h-4 w-4" />} title="In-app" status="Toasts, sound & bell" ok />
             <ChannelTile
               icon={<TelegramIcon className="h-4 w-4" />}
@@ -323,6 +330,7 @@ export function NotificationsSection({ settings }: { settings: Settings | undefi
                   </Button>
                 ))}
             </ChannelTile>
+            <ChannelTile icon={<Mail className="h-4 w-4" />} title="Email" ok={smtpOk && !!myEmail} status={!smtpOk ? 'Server not configured' : myEmail ? `To ${myEmail}` : 'No address on your account'} />
           </div>
 
           <div className="overflow-hidden rounded-xl border border-slate-200/80 dark:border-white/[0.07]">
@@ -333,8 +341,11 @@ export function NotificationsSection({ settings }: { settings: Settings | undefi
                     Event
                   </th>
                   {columns.map((c) => (
-                    <th key={c.ch} scope="col" className="w-[64px] px-1 py-2 text-center font-medium sm:w-[92px]" title={c.disabled ? c.why : undefined}>
-                      <span className={cn(c.disabled && 'opacity-50')}>{c.label}</span>
+                    <th key={c.ch} scope="col" className="w-[50px] px-0.5 py-2 text-center font-medium sm:w-[84px]" title={c.disabled ? c.why : undefined}>
+                      <span className={cn(c.disabled && 'opacity-50')}>
+                        <span className="hidden sm:inline">{c.label}</span>
+                        <span className="sm:hidden">{c.short ?? c.label}</span>
+                      </span>
                     </th>
                   ))}
                 </tr>
@@ -343,7 +354,7 @@ export function NotificationsSection({ settings }: { settings: Settings | undefi
                 {GROUPS.map((g) => (
                   <Fragment key={g.label}>
                     <tr className="bg-slate-50/60 dark:bg-white/[0.015]">
-                      <th scope="colgroup" colSpan={4} className="px-3 pb-1.5 pt-2.5 text-left sm:px-4">
+                      <th scope="colgroup" colSpan={columns.length + 1} className="px-3 pb-1.5 pt-2.5 text-left sm:px-4">
                         <span className="label-xs !text-[10.5px]">{g.label}</span>
                       </th>
                     </tr>
@@ -365,7 +376,7 @@ export function NotificationsSection({ settings }: { settings: Settings | undefi
                             </div>
                           </td>
                           {columns.map((c) => (
-                            <td key={c.ch} className="px-1 py-2.5 text-center">
+                            <td key={c.ch} className="px-0.5 py-2.5 text-center">
                               <span title={c.disabled ? c.why : undefined} className="inline-flex">
                                 <Switch
                                   size="sm"

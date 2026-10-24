@@ -1,3 +1,4 @@
+import type { Sensor } from '@/api/types'
 import { useEffect, useRef, useState } from 'react'
 import { Pause, Play, RotateCcw } from 'lucide-react'
 import type { GeoJSONSource } from 'maplibre-gl'
@@ -13,7 +14,7 @@ const RATES = [1, 2, 4, 8, 16, 32]
 /** virtual track-seconds advanced per real second at 1x */
 const BASE = 10
 
-export function Playback({ track, seek }: { track: Track; seek: { v: number; n: number } | null }) {
+export function Playback({ track, seek, sensors }: { track: Track; seek: { v: number; n: number } | null; sensors?: Sensor[] }) {
   const { map, styleVersion } = useMapCtx()
   const [v, setV] = useState(0)
   const [playing, setPlaying] = useState(false)
@@ -121,7 +122,7 @@ export function Playback({ track, seek }: { track: Track; seek: { v: number; n: 
 
   return (
     <div className="glass pointer-events-auto w-full rounded-2xl px-3 pb-2.5 pt-2 sm:px-4">
-    <SpeedChart track={track} v={v} onSeek={setV} className="mb-1.5" />
+    <SpeedChart track={track} v={v} onSeek={setV} className="mb-1.5" sensors={sensors} />
     <div className="flex w-full items-center gap-3 sm:gap-4">
       <button
         type="button"

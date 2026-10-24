@@ -1,7 +1,7 @@
 import { CircleAlert, CircleCheck, Info, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useToasts, type Toast } from '@/store/toast'
-import { eventDetail, eventMeta } from '@/lib/events'
+import { eventDetail, eventLink, eventMeta } from '@/lib/events'
 import { fmtTime } from '@/lib/format'
 import { cn } from '@/lib/cn'
 
@@ -13,7 +13,7 @@ function EventToast({ t, onDismiss }: { t: Toast; onDismiss: () => void }) {
   const alarm = e.type === 'alarm'
   const detail = eventDetail(e)
   const open = () => {
-    nav(`/live?device=${e.deviceId}`)
+    nav(eventLink(e))
     onDismiss()
   }
   return (

@@ -1,7 +1,7 @@
 // Types mirroring docs/API.md (v1 + Phase 2 + Phase 3 additions). Keep in sync with the contract.
 
 /** Phase 3 roles. Legacy `user` rows migrate to `manager` server-side; the UI treats `user` as manager too. */
-export type Role = 'admin' | 'manager' | 'viewer' | 'user'
+export type Role = 'admin' | 'manager' | 'viewer' | 'user' | 'driver'
 export const ROLES = ['admin', 'manager', 'viewer'] as const
 
 export interface User {
@@ -14,6 +14,8 @@ export interface User {
   active?: boolean
   createdAt?: string
   lastLoginAt?: string | null
+  /** Phase 4a (assumed, optional): whether the user has linked a Telegram chat — used to pick report recipients */
+  telegramLinked?: boolean
 }
 
 export interface LoginResponse {
@@ -55,6 +57,8 @@ export interface Position {
   priority: number
   eventId: number
   attributes: PositionAttributes
+  /** Phase 4a: computed sensor values keyed by sensor id (only with `?sensors=1`) */
+  sensors?: Record<string, number | null>
 }
 
 export interface Device {
@@ -84,6 +88,8 @@ export interface Device {
   engineHours?: number
   /** current driver */
   driverId?: number | null
+  /** Phase 4a: latest computed sensor values */
+  sensors?: DeviceSensorValue[]
 }
 
 export type DeviceSource = 'direct' | 'traccar'
@@ -142,6 +148,17 @@ export const EVENT_TYPES = [
   'maintenanceDue',
   'documentExpiry',
   'commandResult',
+  // Phase 4a
+  'jobAssigned',
+  'jobStatus',
+  'jobStopArrived',
+  'jobLate',
+  'routeDeviation',
+  'routeReturn',
+  'fuelDrain',
+  'refuel',
+  'sensorHigh',
+  'sensorLow',
 ] as const
 export type EventType = (typeof EVENT_TYPES)[number]
 
@@ -159,6 +176,16 @@ export const NOTIFY_EVENT_TYPES = [
   'idle',
   'maintenanceDue',
   'documentExpiry',
+  'jobAssigned',
+  'jobStatus',
+  'jobStopArrived',
+  'jobLate',
+  'routeDeviation',
+  'routeReturn',
+  'fuelDrain',
+  'refuel',
+  'sensorHigh',
+  'sensorLow',
 ] as const
 export type NotifyEventType = (typeof NOTIFY_EVENT_TYPES)[number]
 
@@ -252,16 +279,33 @@ export interface Settings {
   /** 0 = off */
   idleAlertMinutes?: number
   harshScoring?: boolean
+  /** Phase 4a */
+  driverAppTracking?: boolean
+  smtp?: SmtpSettings
+}
+
+export type SmtpTls = 'starttls' | 'tls' | 'none'
+export interface SmtpSettings {
+  host: string
+  port: number
+  username: string
+  /** write-only: always "" on GET */
+  password: string
+  from: string
+  tls: SmtpTls
+  configured: boolean
 }
 
 export type SettingsPatch = Partial<
-  Pick<Settings, 'speedLimit' | 'overspeedMinDuration' | 'telegramBotToken' | 'currency' | 'idleAlertMinutes' | 'harshScoring'>
->
+  Pick<Settings, 'speedLimit' | 'overspeedMinDuration' | 'telegramBotToken' | 'currency' | 'idleAlertMinutes' | 'harshScoring' | 'driverAppTracking'>
+> & { smtp?: Partial<Omit<SmtpSettings, 'configured'>> }
 
 export interface ChannelPrefs {
   inApp: boolean
   telegram: boolean
   push: boolean
+  /** Phase 4a (default off) */
+  email?: boolean
 }
 export type Channel = keyof ChannelPrefs
 
@@ -292,6 +336,9 @@ export type WsMessage =
   | { type: 'command'; data: Command }
   | { type: 'geofences' }
   | { type: 'notifications' }
+  | { type: 'job'; data: Job }
+  | { type: 'jobDeleted'; data: { id: number } }
+  | { type: 'routes' }
 
 // ---------------------------------------------------------------- Phase 3
 
@@ -331,8 +378,10 @@ export interface Driver {
   deviceId: number | null
   notes: string
   createdAt: string
+  /** Phase 4a: linked driver-app login (User with role `driver`) */
+  userId?: number | null
 }
-export type DriverInput = Omit<Driver, 'id' | 'createdAt'>
+export type DriverInput = Omit<Driver, 'id' | 'createdAt' | 'userId'>
 
 export type DueStatus = 'ok' | 'dueSoon' | 'overdue'
 
@@ -481,6 +530,9 @@ export const REPORT_TYPES = [
   'maintenance',
   'expenses',
   'systemLog',
+  // Phase 4a (sensors)
+  'fuel',
+  'temperature',
 ] as const
 export type ReportType = (typeof REPORT_TYPES)[number]
 export type ReportFormat = 'json' | 'csv' | 'xlsx' | 'pdf'
@@ -525,4 +577,231 @@ export interface DashboardData {
   expenses: { total: number; currency: string }
   /** 0..1 */
   utilization: number
+}
+
+// ---------------------------------------------------------------- Phase 4a
+
+export const JOB_STATUSES = [
+  'unassigned',
+  'assigned',
+  'accepted',
+  'enRoute',
+  'arrived',
+  'inProgress',
+  'completed',
+  'failed',
+  'cancelled',
+] as const
+export type JobStatus = (typeof JOB_STATUSES)[number]
+export type JobPriority = 'normal' | 'high' | 'urgent'
+export type StopStatus = 'pending' | 'arrived' | 'completed' | 'skipped'
+
+export interface JobStop {
+  id?: number
+  seq: number
+  name: string
+  address: string
+  lat: number
+  lng: number
+  /** meters */
+  radius: number
+  status: StopStatus
+  arrivedAt: string | null
+  departedAt: string | null
+  completedAt: string | null
+  notes: string
+}
+
+export interface ChecklistItem {
+  id?: number
+  text: string
+  required: boolean
+  done: boolean
+  doneAt: string | null
+}
+
+export type AttachmentKind = 'photo' | 'signature' | 'document'
+export interface Attachment {
+  id: number
+  /** implementation notes: also jobId, contentType, size (bytes), userId */
+  jobId?: number
+  contentType?: string
+  size?: number
+  userId?: number | null
+  kind: AttachmentKind
+  stopId: number | null
+  /** e.g. /api/v1/files/9 — needs the bearer token */
+  url: string
+  name: string
+  createdAt: string
+}
+
+export interface Job {
+  id: number
+  reference: string
+  title: string
+  description: string
+  priority: JobPriority
+  status: JobStatus
+  deviceId: number | null
+  driverId: number | null
+  customerName: string
+  customerPhone: string
+  scheduledStart: string | null
+  dueBy: string | null
+  stops: JobStop[]
+  checklist: ChecklistItem[]
+  attachments: Attachment[]
+  notes: string
+  failureReason: string
+  /** null when the creator was deleted */
+  createdBy: number | null
+  createdAt: string
+  updatedAt: string
+  completedAt: string | null
+  routeId: number | null
+  /** server-computed: dueBy passed and not completed/failed/cancelled */
+  late?: boolean
+}
+
+export type JobInput = Pick<
+  Job,
+  | 'title'
+  | 'description'
+  | 'priority'
+  | 'deviceId'
+  | 'driverId'
+  | 'customerName'
+  | 'customerPhone'
+  | 'scheduledStart'
+  | 'dueBy'
+  | 'notes'
+  | 'routeId'
+> & {
+  stops: Array<Pick<JobStop, 'name' | 'address' | 'lat' | 'lng' | 'radius' | 'seq' | 'notes'> & { id?: number }>
+  checklist: Array<Pick<ChecklistItem, 'text' | 'required'> & { id?: number; done?: boolean }>
+}
+
+export interface JobQuery {
+  status?: string
+  deviceId?: number
+  driverId?: number
+  from?: string
+  to?: string
+  q?: string
+}
+
+export type JobEventKind =
+  | 'created'
+  | 'assigned'
+  | 'status'
+  | 'stopArrived'
+  | 'stopDeparted'
+  | 'stopCompleted'
+  | 'stopSkipped'
+  | 'checklist'
+  | 'attachment'
+  | 'note'
+  | 'updated'
+  | 'late'
+export interface JobEvent {
+  id: number
+  jobId: number
+  time: string
+  userId: number | null
+  kind: JobEventKind | string
+  data: Record<string, unknown>
+}
+
+/** Planned route (`Route` in docs/API.md — renamed to avoid clashing with react-router). */
+export interface FleetRoute {
+  id: number
+  name: string
+  color: string
+  /** [[lng, lat], ...] ≥ 2 points */
+  path: Array<[number, number]>
+  /** meters each side */
+  corridor: number
+  deviceIds: number[]
+  minDeviationSeconds: number
+  createdAt: string
+  updatedAt?: string
+}
+export type RouteInput = Pick<FleetRoute, 'name' | 'color' | 'path' | 'corridor' | 'deviceIds' | 'minDeviationSeconds'>
+
+export type SchedulePeriod = 'yesterday' | 'today' | 'lastWeek' | 'thisWeek' | 'lastMonth' | 'thisMonth'
+export type ScheduleFrequency = 'daily' | 'weekly' | 'monthly'
+export interface ReportSchedule {
+  id: number
+  name: string
+  reportType: ReportType | string
+  filters: { deviceIds: number[]; groupId: number | null; driverId: number | null }
+  period: SchedulePeriod
+  frequency: ScheduleFrequency
+  hour: number
+  /** 0 = Sunday … 6 = Saturday (weekly) */
+  weekday: number
+  /** 1–28 (monthly) */
+  monthDay: number
+  timezone: string
+  format: 'pdf' | 'xlsx' | 'csv'
+  telegramUserIds: number[]
+  emails: string[]
+  enabled: boolean
+  lastRunAt: string | null
+  lastStatus: 'ok' | 'error' | null
+  lastError: string
+  nextRunAt: string | null
+  createdBy?: number | null
+  createdAt?: string
+}
+export type ReportScheduleInput = Omit<ReportSchedule, 'id' | 'lastRunAt' | 'lastStatus' | 'lastError' | 'nextRunAt' | 'createdBy' | 'createdAt'>
+export interface ScheduleRun {
+  time: string
+  status: 'ok' | 'error'
+  error: string
+  /** successful deliveries: "telegram:<user email>" / "email:<address>" */
+  recipients: string[] | string
+  /** true for "Send now" runs */
+  manual?: boolean
+}
+
+export const SENSOR_TYPES = ['fuel', 'temperature', 'humidity', 'voltage', 'generic'] as const
+export type SensorType = (typeof SENSOR_TYPES)[number]
+export interface Sensor {
+  id: number
+  deviceId: number
+  name: string
+  type: SensorType
+  /** position attribute key: io<ID>, fuel, power, temp1 … */
+  source: string
+  /** [raw, value] points; [] = use multiplier/offset */
+  calibration: Array<[number, number]>
+  multiplier: number
+  offset: number
+  unit: string
+  decimals: number
+  min: number | null
+  max: number | null
+  tankCapacity: number | null
+  fuelDropThreshold: number | null
+  fuelFillThreshold: number | null
+  smoothing: number
+  createdAt: string
+}
+export type SensorInput = Omit<Sensor, 'id' | 'createdAt'>
+
+export interface DeviceSensorValue {
+  id: number
+  name: string
+  type: SensorType | string
+  value: number | null
+  unit: string
+  time: string | null
+}
+
+export interface DriverMe {
+  user: User
+  driver: Driver
+  vehicle: Device | null
 }

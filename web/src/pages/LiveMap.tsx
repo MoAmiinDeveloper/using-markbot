@@ -1,6 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Hexagon, MapPin, Maximize, RefreshCw, TriangleAlert, X } from 'lucide-react'
+import { Hexagon, MapPin, Maximize, RefreshCw, Route as RouteIcon, TriangleAlert, X } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { api, qk } from '@/api/client'
+const RoutesLayer = lazy(() => import('@/components/map/RoutesLayer').then((m) => ({ default: m.RoutesLayer })))
 import { PlacesLayer } from '@/components/map/PlacesLayer'
 import { usePlaces } from '@/features/common/queries'
 import type { PaddingOptions } from 'maplibre-gl'
@@ -118,6 +121,9 @@ export function LiveMapPage() {
   const showPlaces = useUi((s) => s.showPlaces)
   const togglePlaces = useUi((s) => s.togglePlaces)
   const places = usePlaces(showPlaces)
+  const showRoutes = useUi((s) => s.showRoutes)
+  const toggleRoutes = useUi((s) => s.toggleRoutes)
+  const routes = useQuery({ queryKey: qk.routes, queryFn: api.routes, enabled: showRoutes, staleTime: 5 * 60_000, meta: { silent: true } })
   const [follow, setFollow] = useState(false)
   const [fitTick, setFitTick] = useState(0)
   const [expanded, setExpanded] = useState(false)
@@ -142,6 +148,11 @@ export function LiveMapPage() {
       <MapCanvas className="absolute inset-0">
         {showGeofences && <GeofenceLayer geofences={geofences.data ?? []} />}
         {showPlaces && <PlacesLayer places={places.data ?? []} />}
+        {showRoutes && (
+          <Suspense fallback={null}>
+            <RoutesLayer routes={routes.data ?? []} />
+          </Suspense>
+        )}
         {at && <EventPin lng={at[0]} lat={at[1]} color={eventMeta(atType ?? '').color} title="Alert location" />}
         <VehicleLayer
           devices={devices}
@@ -212,6 +223,9 @@ export function LiveMapPage() {
               </ControlButton>
               <ControlButton label={showPlaces ? 'Hide places' : 'Show places'} onClick={togglePlaces} active={showPlaces}>
                 <MapPin className="h-[16px] w-[16px]" />
+              </ControlButton>
+              <ControlButton label={showRoutes ? 'Hide routes' : 'Show routes'} onClick={toggleRoutes} active={showRoutes}>
+                <RouteIcon className="h-[16px] w-[16px]" />
               </ControlButton>
             </ControlGroup>
           </MapControls>

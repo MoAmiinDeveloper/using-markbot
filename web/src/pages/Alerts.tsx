@@ -61,6 +61,16 @@ function Focus({ lng, lat }: { lng: number; lat: number }) {
   return null
 }
 
+function detailLabel(t: string): string {
+  if (t === 'alarm') return 'Alarm'
+  if (t.startsWith('geofence')) return 'Geofence'
+  if (t.startsWith('job')) return 'Job'
+  if (t.startsWith('route')) return 'Route'
+  if (t === 'fuelDrain' || t === 'refuel') return 'Fuel'
+  if (t.startsWith('sensor')) return 'Sensor'
+  return 'Details'
+}
+
 function EventPreview({ e, onClose, compact }: { e: FleetEvent; onClose?: () => void; compact?: boolean }) {
   const nav = useNavigate()
   const dev = useLive((s) => s.byId[e.deviceId])
@@ -122,7 +132,7 @@ function EventPreview({ e, onClose, compact }: { e: FleetEvent; onClose?: () => 
           )}
           {eventDetail(e) && e.type !== 'overspeed' && (
             <>
-              <dt className="text-slate-500 dark:text-slate-400">{e.type === 'alarm' ? 'Alarm' : 'Geofence'}</dt>
+              <dt className="text-slate-500 dark:text-slate-400">{detailLabel(e.type)}</dt>
               <dd className="truncate text-right text-slate-900 dark:text-white">{eventDetail(e)}</dd>
             </>
           )}

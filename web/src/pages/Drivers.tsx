@@ -15,6 +15,10 @@ import {
   Trash2,
   TriangleAlert,
   UserRound,
+  Smartphone,
+  Eye,
+  EyeOff,
+  KeyRound,
 } from 'lucide-react'
 import { api, ApiError, qk } from '@/api/client'
 import type { Driver, DriverInput } from '@/api/types'
@@ -242,7 +246,166 @@ function DriverForm({ initial, onClose }: { initial: Driver | null; onClose: () 
           {(id) => <Textarea id={id} rows={3} value={v.notes} placeholder="Shift, depot, certifications…" onChange={(e) => set('notes', e.target.value)} />}
         </Field>
       </form>
+      {initial ? (
+        <AppLogin driver={initial} />
+      ) : (
+        <p className="mt-5 flex items-start gap-2 rounded-xl bg-slate-50 px-3 py-2.5 text-[12px] text-slate-500 dark:bg-white/[0.03] dark:text-slate-400">
+          <Smartphone className="mt-0.5 h-4 w-4 shrink-0" /> After saving, edit the driver to create a login for the driver app.
+        </p>
+      )}
     </Drawer>
+  )
+}
+
+/** Driver-app login (Phase 4a): a User with role `driver` linked to this Driver. */
+function AppLogin({ driver }: { driver: Driver }) {
+  const qc = useQueryClient()
+  const live = useDrivers().data?.find((d) => d.id === driver.id) ?? driver
+  const linked = live.userId != null
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [show, setShow] = useState(false)
+  const [touched, setTouched] = useState(false)
+  const [confirm, setConfirm] = useState(false)
+  const [resetting, setResetting] = useState(false)
+  const users = useQuery({ queryKey: qk.users, queryFn: api.users, enabled: linked, staleTime: 5 * 60_000, retry: false, meta: { silent: true } })
+  const loginEmail = users.data?.find((u) => u.id === live.userId)?.email
+  const emailErr = !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) ? 'Enter a valid email' : undefined
+  const pwErr = password.length < 8 ? 'At least 8 characters' : undefined
+  const patch = (userId: number | null) => qc.setQueryData<Driver[]>(qk.drivers, (l) => l?.map((d) => (d.id === driver.id ? { ...d, userId } : d)))
+  const create = useMutation({
+    meta: { silent: true },
+    mutationFn: () => api.createDriverAccount(driver.id, email.trim(), password),
+    onSuccess: (u) => {
+      patch(u?.id ?? -1)
+      void qc.invalidateQueries({ queryKey: qk.drivers })
+      toast.success(linked ? 'Driver app login updated' : 'Driver app login created', `${driver.name} can sign in with ${email.trim()}`)
+      setResetting(false)
+      setEmail('')
+      setPassword('')
+      setTouched(false)
+    },
+    onError: (e) => toast.error('Could not create the login', e instanceof ApiError ? e.message : String(e)),
+  })
+  const remove = useMutation({
+    mutationFn: () => api.deleteDriverAccount(driver.id),
+    onSuccess: () => {
+      patch(null)
+      void qc.invalidateQueries({ queryKey: qk.drivers })
+      toast.success('Driver app login removed', driver.name)
+      setConfirm(false)
+    },
+  })
+  return (
+    <section aria-labelledby="app-login-title" className="mt-5 rounded-xl border border-slate-200/80 p-3.5 dark:border-white/[0.07]">
+      <div className="flex items-start gap-3">
+        <span className={cn('grid h-9 w-9 shrink-0 place-items-center rounded-xl', linked ? 'bg-emerald-500/12 text-emerald-600 dark:text-emerald-400' : 'bg-slate-100 text-slate-500 dark:bg-white/[0.06] dark:text-slate-400')}>
+          <Smartphone className="h-[18px] w-[18px]" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <h3 id="app-login-title" className="text-[13.5px] font-semibold text-slate-900 dark:text-white">
+            App login
+          </h3>
+          <p className={cn('text-[12px]', linked ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400')}>
+            {linked ? 'Linked — the driver can sign in to the Android driver app' : 'No login yet — create one so the driver can receive jobs on their phone'}
+          </p>
+        </div>
+      </div>
+      {linked && !resetting ? (
+        <div className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-[12px] text-slate-600 dark:bg-white/[0.03] dark:text-slate-300">
+          {loginEmail && (
+            <p className="mb-1">
+              Signs in as <b className="font-medium text-slate-900 dark:text-white">{loginEmail}</b>
+            </p>
+          )}
+          <p>Jobs, status updates, photos and signatures sync live.</p>
+          <div className="mt-2 flex flex-wrap justify-end gap-1">
+            <Button
+              size="sm"
+              variant="ghost"
+              icon={<KeyRound className="h-3.5 w-3.5" />}
+              onClick={() => {
+                setEmail(loginEmail ?? '')
+                setPassword('')
+                setTouched(false)
+                setResetting(true)
+              }}
+            >
+              Reset password
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setConfirm(true)} className="hover:!text-rose-600 dark:hover:!text-rose-400">
+              Remove login
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <form
+          className="mt-3 space-y-3"
+          noValidate
+          onSubmit={(e) => {
+            e.preventDefault()
+            setTouched(true)
+            if (!emailErr && !pwErr) create.mutate()
+          }}
+        >
+          <Field label="Email" error={touched ? emailErr : undefined}>
+            {(id, d) => <Input id={id} aria-describedby={d} type="email" autoComplete="off" value={email} invalid={touched && !!emailErr} placeholder="ahmed.driver@somtel.so" onChange={(e) => setEmail(e.target.value)} />}
+          </Field>
+          <Field label="Password" error={touched ? pwErr : undefined} hint={touched && pwErr ? undefined : 'Share it with the driver in person'}>
+            {(id, d) => (
+              <Input
+                id={id}
+                aria-describedby={d}
+                type={show ? 'text' : 'password'}
+                autoComplete="new-password"
+                value={password}
+                invalid={touched && !!pwErr}
+                onChange={(e) => setPassword(e.target.value)}
+                trailing={
+                  <button type="button" onClick={() => setShow((x) => !x)} aria-label={show ? 'Hide password' : 'Show password'} className="grid h-7 w-7 place-items-center rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-white">
+                    {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                }
+              />
+            )}
+          </Field>
+          <div className="flex justify-end gap-2">
+            {resetting && (
+              <Button size="sm" onClick={() => setResetting(false)}>
+                Cancel
+              </Button>
+            )}
+            <Button type="submit" size="sm" variant="primary" icon={<KeyRound className="h-3.5 w-3.5" />} loading={create.isPending}>
+              {resetting ? 'Save new password' : 'Create app login'}
+            </Button>
+          </div>
+        </form>
+      )}
+      <Modal
+        open={confirm}
+        onClose={() => !remove.isPending && setConfirm(false)}
+        title={`Remove ${driver.name}’s app login?`}
+        description="The driver is signed out of the app and stops receiving jobs. Their job history is kept."
+        footer={
+          <>
+            <Button onClick={() => setConfirm(false)} disabled={remove.isPending} data-autofocus>
+              Cancel
+            </Button>
+            <Button variant="danger" loading={remove.isPending} onClick={() => remove.mutate()}>
+              Remove login
+            </Button>
+          </>
+        }
+      />
+    </section>
+  )
+}
+
+function AppBadge() {
+  return (
+    <span title="Has a driver-app login" className="inline-flex shrink-0 items-center gap-0.5 rounded-md bg-emerald-500/12 px-1 py-px text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
+      <Smartphone className="h-2.5 w-2.5" /> App
+    </span>
   )
 }
 
@@ -449,7 +612,10 @@ export default function DriversPage() {
                               {initials(d.name)}
                             </span>
                             <div className="min-w-0">
-                              <div className="truncate font-medium text-slate-900 dark:text-white">{d.name}</div>
+                              <div className="flex items-center gap-1.5 truncate font-medium text-slate-900 dark:text-white">
+                                {d.name}
+                                {d.userId != null && <AppBadge />}
+                              </div>
                               <div className="truncate text-[12px] text-slate-500 dark:text-slate-400">{d.phone || 'No phone'}</div>
                             </div>
                           </div>
@@ -483,6 +649,7 @@ export default function DriversPage() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           <span className="truncate font-medium text-slate-900 dark:text-white">{d.name}</span>
+                          {d.userId != null && <AppBadge />}
                           <ScoreBadge score={scoreOf(d)} />
                         </div>
                         <div className="mt-0.5 truncate text-[12px] text-slate-500 dark:text-slate-400">{vehicle(d)}</div>

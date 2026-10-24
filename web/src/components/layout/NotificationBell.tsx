@@ -6,7 +6,7 @@ import { useLive } from '@/store/live'
 import { useNow } from '@/store/now'
 import { IconButton } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/Misc'
-import { eventDetail, eventMeta } from '@/lib/events'
+import { eventDetail, eventLink, eventMeta } from '@/lib/events'
 import { timeAgo } from '@/lib/format'
 import { cn } from '@/lib/cn'
 
@@ -91,7 +91,7 @@ export function NotificationBell() {
                         type="button"
                         onClick={() => {
                           setOpen(false)
-                          nav(`/live?device=${e.deviceId}`)
+                          nav(eventLink(e))
                         }}
                         className={cn(
                           'flex w-full items-start gap-3 rounded-xl px-2.5 py-2.5 text-left transition-colors hover:bg-slate-900/[0.04] dark:hover:bg-white/[0.05]',

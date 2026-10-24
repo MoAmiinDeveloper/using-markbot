@@ -1,13 +1,23 @@
 import { useMemo, useRef, useState } from 'react'
 import { cn } from '@/lib/cn'
+import type { Position, Sensor } from '@/api/types'
+import { sensorMeta } from '@/features/sensors/sensor'
 import type { Track } from './track'
 
-type SeriesId = 'speed' | 'power' | 'fuel'
-const SERIES: Record<SeriesId, { label: string; unit: string; color: string; attr?: string }> = {
-  speed: { label: 'Speed', unit: 'km/h', color: '#ffd700' },
-  power: { label: 'Voltage', unit: 'V', color: '#38bdf8', attr: 'power' },
-  fuel: { label: 'Fuel', unit: '%', color: '#10b981', attr: 'fuel' },
+type SeriesId = string
+interface SeriesDef {
+  label: string
+  unit: string
+  color: string
+  get: (p: Position) => number | null
 }
+const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null)
+const BASE: Record<string, SeriesDef> = {
+  speed: { label: 'Speed', unit: 'km/h', color: '#ffd700', get: (p) => p.speed },
+  power: { label: 'Voltage', unit: 'V', color: '#94a3b8', get: (p) => num(p.attributes?.power) },
+  fuel: { label: 'Fuel', unit: '%', color: '#10b981', get: (p) => num(p.attributes?.fuel) },
+}
+const EXTRA_COLORS = ['#f97316', '#0ea5e9', '#a855f7', '#14b8a6', '#ec4899', '#84cc16']
 const MAX_PTS = 480
 const W = 1000
 
@@ -15,13 +25,28 @@ const W = 1000
  * Speed (and voltage / fuel when reported) over the playback timeline. X is the same
  * virtual time as the scrubber, so the cursor and click-to-seek stay in sync with it.
  */
-export function SpeedChart({ track, v, onSeek, className }: { track: Track; v: number; onSeek: (v: number) => void; className?: string }) {
+export function SpeedChart({ track, v, onSeek, className, sensors }: { track: Track; v: number; onSeek: (v: number) => void; className?: string; sensors?: Sensor[] }) {
+  const SERIES = useMemo(() => {
+    const out: Record<string, SeriesDef> = { ...BASE }
+    // calibrated sensors (?sensors=1) replace the raw fuel attribute
+    if (sensors?.length) delete out.fuel
+    sensors?.forEach((s, i) => {
+      const m = sensorMeta(s.type)
+      const sameType = sensors.filter((x) => x.type === s.type).length > 1
+      out[`sensor:${s.id}`] = { label: s.name, unit: s.unit, color: sameType ? EXTRA_COLORS[i % EXTRA_COLORS.length] : m.color, get: (p) => num(p.sensors?.[String(s.id)]) }
+    })
+    return out
+  }, [sensors])
   const available = useMemo(() => {
     const ids: SeriesId[] = ['speed']
-    for (const id of ['power', 'fuel'] as const) if (track.positions.some((p) => typeof p.attributes?.[SERIES[id].attr!] === 'number')) ids.push(id)
+    for (const id of Object.keys(SERIES)) if (id !== 'speed' && track.positions.some((p) => SERIES[id].get(p) != null)) ids.push(id)
     return ids
-  }, [track])
-  const [on, setOn] = useState<SeriesId[]>(['speed'])
+  }, [track, SERIES])
+  const [on, setOn] = useState<SeriesId[]>(() => ['speed'])
+  const [touched, setTouched] = useState(false)
+  // show the first sensor series by default when present
+  const firstSensor = available.find((x) => x.startsWith('sensor:'))
+  const shown = on.length === 1 && on[0] === 'speed' && firstSensor && !touched ? ['speed', firstSensor] : on
   const svg = useRef<SVGSVGElement>(null)
   const [dragging, setDragging] = useState(false)
   const H = 64
@@ -32,12 +57,7 @@ export function SpeedChart({ track, v, onSeek, className }: { track: Track; v: n
     const step = Math.max(1, Math.ceil(n / MAX_PTS))
     const out: Partial<Record<SeriesId, { line: string; area: string; max: number; min: number }>> = {}
     for (const id of available) {
-      const val = (i: number): number | null => {
-        const p = track.positions[i]
-        if (id === 'speed') return p.speed
-        const a = p.attributes?.[SERIES[id].attr!]
-        return typeof a === 'number' ? a : null
-      }
+      const val = (i: number): number | null => SERIES[id].get(track.positions[i])
       const pts: Array<[number, number]> = []
       for (let i = 0; i < n; i += step) {
         // keep peaks when downsampling
@@ -59,7 +79,7 @@ export function SpeedChart({ track, v, onSeek, className }: { track: Track; v: n
       out[id] = { line, area, max, min }
     }
     return out
-  }, [track, available, dur])
+  }, [track, available, dur, SERIES])
 
   const seekAt = (clientX: number) => {
     const r = svg.current?.getBoundingClientRect()
@@ -67,28 +87,45 @@ export function SpeedChart({ track, v, onSeek, className }: { track: Track; v: n
     onSeek(Math.min(1, Math.max(0, (clientX - r.left) / r.width)) * dur)
   }
   const cx = (v / dur) * W
+  function valueAt(id: string): number | null {
+    // nearest sample to the playback cursor
+    let lo = 0
+    let hi = track.vt.length - 1
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1
+      if (track.vt[mid] < v) lo = mid + 1
+      else hi = mid
+    }
+    return track.positions[lo] ? SERIES[id].get(track.positions[lo]) : null
+  }
   const speedMax = paths.speed?.max
 
   return (
     <div className={cn('relative', className)}>
-      <div className="mb-1 flex items-center gap-1.5">
+      <div className="mb-1 flex items-center gap-1.5 overflow-x-auto [scrollbar-width:none]">
         {available.map((id) => {
           const s = SERIES[id]
-          const active = on.includes(id)
+          const active = shown.includes(id)
+          const cur = id !== 'speed' && active ? valueAt(id) : null
           return (
             <button
               key={id}
               type="button"
               aria-pressed={active}
               disabled={id === 'speed'}
-              onClick={() => setOn((o) => (active ? o.filter((x) => x !== id) : [...o, id]))}
+              title={`${s.label} (${s.unit})`}
+              onClick={() => {
+                setTouched(true)
+                setOn(active ? shown.filter((x) => x !== id) : [...shown, id])
+              }}
               className={cn(
-                'inline-flex h-5 items-center gap-1 rounded-full px-1.5 text-[10.5px] font-semibold transition-colors disabled:cursor-default',
+                'inline-flex h-5 shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-1.5 text-[10.5px] font-semibold transition-colors disabled:cursor-default',
                 active ? 'bg-slate-900/[0.06] text-slate-700 dark:bg-white/10 dark:text-slate-200' : 'text-slate-400 hover:text-slate-600',
               )}
             >
               <span className="h-1.5 w-1.5 rounded-full" style={{ background: s.color }} />
-              {s.label}
+              <span className="max-w-[110px] truncate">{s.label}</span>
+              {cur != null && <span className="tabular font-medium opacity-70">{Math.round(cur * 10) / 10}{s.unit ? ` ${s.unit}` : ''}</span>}
             </button>
           )
         })}
@@ -127,11 +164,13 @@ export function SpeedChart({ track, v, onSeek, className }: { track: Track; v: n
             <path d={paths.speed.line} fill="none" stroke="#e6c200" strokeWidth="1.6" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
           </>
         )}
-        {(['power', 'fuel'] as const).map((id) =>
-          on.includes(id) && paths[id] ? (
-            <path key={id} d={paths[id]!.line} fill="none" stroke={SERIES[id].color} strokeWidth="1.4" vectorEffect="non-scaling-stroke" strokeDasharray="4 3" />
-          ) : null,
-        )}
+        {available
+          .filter((id) => id !== 'speed')
+          .map((id) =>
+            shown.includes(id) && paths[id] ? (
+              <path key={id} d={paths[id]!.line} fill="none" stroke={SERIES[id].color} strokeWidth={id.startsWith('sensor:') ? 1.8 : 1.4} vectorEffect="non-scaling-stroke" strokeDasharray={id.startsWith('sensor:') ? undefined : '4 3'} />
+            ) : null,
+          )}
         <line x1={cx} x2={cx} y1="0" y2={H} className="stroke-navy-700 dark:stroke-white" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
       </svg>
     </div>

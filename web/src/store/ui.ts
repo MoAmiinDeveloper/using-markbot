@@ -20,6 +20,9 @@ interface UiState {
   /** places (POI) overlay on the Live Map */
   showPlaces: boolean
   togglePlaces: () => void
+  /** planned routes overlay on the Live Map (Phase 4a) */
+  showRoutes: boolean
+  toggleRoutes: () => void
   toggleTheme: () => void
   toggleGeofences: () => void
   setMapStyle: (s: MapStyleId) => void
@@ -35,6 +38,12 @@ export const useUi = create<UiState>((set, get) => ({
   mapStyle: initialStyle,
   showGeofences: readLS('fleet.showGeofences') !== '0',
   showPlaces: readLS('fleet.showPlaces') === '1',
+  showRoutes: readLS('fleet.showRoutes') === '1',
+  toggleRoutes: () => {
+    const showRoutes = !get().showRoutes
+    writeLS('fleet.showRoutes', showRoutes ? '1' : '0')
+    set({ showRoutes })
+  },
   togglePlaces: () => {
     const showPlaces = !get().showPlaces
     writeLS('fleet.showPlaces', showPlaces ? '1' : '0')

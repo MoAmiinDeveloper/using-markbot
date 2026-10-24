@@ -12,11 +12,13 @@ import {
   Route,
   ScrollText,
   Wrench,
+  Fuel,
+  Thermometer,
   type LucideIcon,
 } from 'lucide-react'
 import type { ReportType } from '@/api/types'
 
-export type ReportGroup = 'Activity' | 'Alerts' | 'Driver' | 'Fleet'
+export type ReportGroup = 'Activity' | 'Alerts' | 'Driver' | 'Fleet' | 'Sensors'
 
 export interface ReportDef {
   type: ReportType
@@ -42,9 +44,11 @@ export const REPORTS: ReportDef[] = [
   { type: 'driver', label: 'Driver behaviour', group: 'Driver', icon: BadgeCheck, description: 'Overspeed, harsh driving, idling and a 0–100 score', kpis: ['score', 'distance', 'overspeeds', 'harshAcceleration', 'harshBraking', 'harshCornering'] },
   { type: 'maintenance', label: 'Maintenance', group: 'Fleet', icon: Wrench, description: 'Service schedules and what is due' },
   { type: 'expenses', label: 'Expenses', group: 'Fleet', icon: Receipt, description: 'Fuel, tolls, fines… with totals per category', kpis: ['amount', 'liters'] },
+  { type: 'fuel', label: 'Fuel', group: 'Sensors', icon: Fuel, description: 'Per fuel sensor: levels, consumption, refuels, drains, L/100 km', kpis: ['consumed', 'refuelLiters', 'drainLiters', 'distance'] },
+  { type: 'temperature', label: 'Temperature', group: 'Sensors', icon: Thermometer, description: 'Min / avg / max per sensor and time out of range', kpis: ['minutesOutOfRange', 'excursions'] },
   { type: 'systemLog', label: 'System log', group: 'Fleet', icon: ScrollText, description: 'Packets, gaps and reporting health per tracker', kpis: ['packets'] },
 ]
 
-export const REPORT_GROUPS: ReportGroup[] = ['Activity', 'Alerts', 'Driver', 'Fleet']
+export const REPORT_GROUPS: ReportGroup[] = ['Activity', 'Alerts', 'Driver', 'Fleet', 'Sensors']
 
 export const reportDef = (t: string | null | undefined): ReportDef | undefined => REPORTS.find((r) => r.type === t)

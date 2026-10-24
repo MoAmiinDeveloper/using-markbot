@@ -1,8 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Bot, CircleCheck, Coins, Eye, EyeOff, Gauge, KeyRound, RefreshCw, Waypoints } from 'lucide-react'
+import { Bot, CircleCheck, Coins, Eye, EyeOff, Gauge, KeyRound, Mail, RefreshCw, Send, ShieldCheck, Smartphone, Waypoints } from 'lucide-react'
+import { Segmented } from '@/components/ui/Tabs'
 import { api, ApiError, qk } from '@/api/client'
-import type { Settings, SettingsPatch } from '@/api/types'
+import type { Settings, SettingsPatch, SmtpTls } from '@/api/types'
 import { API_BASE } from '@/config'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Select } from '@/components/ui/Input'
@@ -369,6 +370,164 @@ export function OperationsSection({ settings }: { settings: Settings }) {
           </Button>
         </div>
       </form>
+    </SettingsCard>
+  )
+}
+
+export function EmailSection({ settings }: { settings: Settings }) {
+  const smtp = settings.smtp
+  const init = () => ({
+    host: smtp?.host ?? '',
+    port: String(smtp?.port ?? 587),
+    username: smtp?.username ?? '',
+    password: '',
+    from: smtp?.from ?? '',
+    tls: (smtp?.tls ?? 'starttls') as SmtpTls,
+  })
+  const [v, setV] = useState(init)
+  const [show, setShow] = useState(false)
+  const [to, setTo] = useState('')
+  const [touched, setTouched] = useState(false)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => setV(init()), [smtp?.host, smtp?.port, smtp?.username, smtp?.from, smtp?.tls])
+  const save = useSaveSettings('Email settings saved')
+  const set = <K extends keyof typeof v>(k: K, val: (typeof v)[K]) => setV((s) => ({ ...s, [k]: val }))
+  const errors = {
+    host: v.host.trim() && !/^[a-z0-9.-]+$/i.test(v.host.trim()) ? 'Host name only, e.g. smtp.somtel.so' : !v.host.trim() ? 'Required' : undefined,
+    port: !/^\d{1,5}$/.test(v.port) || +v.port < 1 || +v.port > 65535 ? '1 – 65535' : undefined,
+    from: v.from.trim() && !/@/.test(v.from) ? 'Include an email address' : undefined,
+  }
+  const dirty =
+    v.host !== (smtp?.host ?? '') || v.port !== String(smtp?.port ?? 587) || v.username !== (smtp?.username ?? '') || !!v.password || v.from !== (smtp?.from ?? '') || v.tls !== (smtp?.tls ?? 'starttls')
+  const submit = (e: FormEvent) => {
+    e.preventDefault()
+    setTouched(true)
+    if (errors.host || errors.port || errors.from) return
+    save.mutate(
+      { smtp: { host: v.host.trim(), port: +v.port, username: v.username.trim(), from: v.from.trim(), tls: v.tls, ...(v.password ? { password: v.password } : {}) } },
+      { onSuccess: () => set('password', '') },
+    )
+  }
+  const test = useMutation({
+    meta: { silent: true },
+    mutationFn: () => api.testSmtp(to.trim()),
+    onSuccess: (r) => toast.success('Test email sent', `Check the inbox of ${r?.to || to.trim()}`),
+    onError: (e) => toast.error('Test email failed', e instanceof ApiError ? e.message : String(e)),
+  })
+  const toOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to.trim())
+  const portFor: Record<SmtpTls, string> = { starttls: '587', tls: '465', none: '25' }
+
+  return (
+    <SettingsCard
+      id="email"
+      icon={<Mail />}
+      title="Email (SMTP)"
+      badge={<AdminBadge />}
+      description="Outgoing mail for scheduled reports and email alerts. Use your mail provider’s SMTP server."
+    >
+      <form onSubmit={submit} className="space-y-4" noValidate>
+        <div className="flex items-center gap-3 rounded-xl border border-slate-200/80 px-3 py-2.5 dark:border-white/[0.07]">
+          {smtp?.configured ? <CircleCheck className="h-5 w-5 shrink-0 text-emerald-500" /> : <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-slate-400" />}
+          <div className="min-w-0 flex-1">
+            <p className="text-[13px] font-medium text-slate-900 dark:text-white">{smtp?.configured ? 'Email is configured' : 'Email not configured yet'}</p>
+            <p className="truncate text-[12px] text-slate-500 dark:text-slate-400">{smtp?.configured ? `Sending as ${smtp.from || smtp.username}` : 'Reports and alerts can’t be emailed until a server is set'}</p>
+          </div>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_120px]">
+          <Field label="SMTP host" error={touched ? errors.host : undefined}>
+            {(id, d) => <Input id={id} aria-describedby={d} value={v.host} invalid={touched && !!errors.host} autoComplete="off" spellCheck={false} placeholder="smtp.somtel.so" onChange={(e) => set('host', e.target.value)} />}
+          </Field>
+          <Field label="Port" error={errors.port}>
+            {(id, d) => <Input id={id} aria-describedby={d} inputMode="numeric" value={v.port} invalid={!!errors.port} onChange={(e) => set('port', e.target.value.replace(/\D/g, '').slice(0, 5))} />}
+          </Field>
+        </div>
+        <div className="space-y-1.5">
+          <span className="block text-[12.5px] font-medium text-slate-700 dark:text-slate-300">Encryption</span>
+          <Segmented<SmtpTls>
+            label="Encryption"
+            value={v.tls}
+            onChange={(t) => setV((s) => ({ ...s, tls: t, port: Object.values(portFor).includes(s.port) ? portFor[t] : s.port }))}
+            className="sm:w-[360px]"
+            options={[
+              { id: 'starttls', label: 'STARTTLS', title: 'Port 587' },
+              { id: 'tls', label: 'SSL / TLS', title: 'Port 465' },
+              { id: 'none', label: 'None', title: 'Unencrypted — not recommended' },
+            ]}
+          />
+          {v.tls === 'none' && <p className="text-[12px] text-amber-600 dark:text-amber-400">Passwords and reports are sent unencrypted. Only use on a trusted network.</p>}
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Username">
+            {(id) => <Input id={id} value={v.username} autoComplete="off" spellCheck={false} placeholder="fleet@somtel.so" onChange={(e) => set('username', e.target.value)} />}
+          </Field>
+          <Field label="Password" hint={smtp?.configured ? 'Leave empty to keep the current password' : 'Stored on the server, never shown again'}>
+            {(id, d) => (
+              <Input
+                id={id}
+                aria-describedby={d}
+                type={show ? 'text' : 'password'}
+                autoComplete="new-password"
+                value={v.password}
+                placeholder={smtp?.configured ? '••••••••' : ''}
+                icon={<KeyRound className="h-4 w-4" />}
+                onChange={(e) => set('password', e.target.value)}
+                trailing={
+                  <button type="button" onClick={() => setShow((x) => !x)} aria-label={show ? 'Hide password' : 'Show password'} className="grid h-7 w-7 place-items-center rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-white">
+                    {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                }
+              />
+            )}
+          </Field>
+        </div>
+        <Field label="From" error={touched ? errors.from : undefined} hint="Name and address recipients see">
+          {(id, d) => <Input id={id} aria-describedby={d} value={v.from} invalid={touched && !!errors.from} placeholder="Somtel Fleet <fleet@somtel.so>" onChange={(e) => set('from', e.target.value)} />}
+        </Field>
+        <div className="flex justify-end gap-2">
+          {dirty && (
+            <Button variant="ghost" onClick={() => setV(init())}>
+              Reset
+            </Button>
+          )}
+          <Button type="submit" variant="primary" disabled={!dirty} loading={save.isPending}>
+            Save email settings
+          </Button>
+        </div>
+      </form>
+      <div className="mt-4 flex flex-col gap-2 rounded-xl bg-slate-50 p-3 dark:bg-white/[0.025] sm:flex-row sm:items-end">
+        <div className="flex-1">
+          <Field label="Send a test email to">
+            {(id) => <Input id={id} type="email" value={to} onChange={(e) => setTo(e.target.value)} placeholder="you@somtel.so" icon={<Mail className="h-4 w-4" />} />}
+          </Field>
+        </div>
+        <Button icon={<Send className="h-4 w-4" />} disabled={!toOk || !smtp?.configured || dirty} title={dirty ? 'Save your changes first' : !smtp?.configured ? 'Configure SMTP first' : undefined} loading={test.isPending} onClick={() => test.mutate()}>
+          Send test email
+        </Button>
+      </div>
+    </SettingsCard>
+  )
+}
+
+export function DriverAppSection({ settings }: { settings: Settings }) {
+  const save = useSaveSettings('Driver app setting saved')
+  const on = !!settings.driverAppTracking
+  return (
+    <SettingsCard id="driver-app" icon={<Smartphone />} title="Driver app" badge={<AdminBadge />} description="Drivers sign in to the Android app with the login you create under Drivers → Edit → App login.">
+      <div className="space-y-3">
+        <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200/80 px-3 py-3 dark:border-white/[0.07]">
+          <div>
+            <p className="text-[13px] font-medium text-slate-900 dark:text-white">Track drivers with phone GPS</p>
+            <p className="mt-0.5 text-[12px] leading-relaxed text-slate-500 dark:text-slate-400">
+              When on, the app sends the phone’s location even if the driver has a vehicle with a tracker. When off, phone GPS is only used for drivers
+              without a vehicle. Phones appear as devices with the <Code>driverapp</Code> protocol.
+            </p>
+          </div>
+          <Switch checked={on} disabled={save.isPending} onChange={(x) => save.mutate({ driverAppTracking: x })} label="Track drivers with phone GPS" />
+        </div>
+        <p className="flex items-start gap-2 text-[12px] text-slate-500 dark:text-slate-400">
+          <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" /> Tell drivers when their phone is tracked. Tracking only runs while they are signed in to the app.
+        </p>
+      </div>
     </SettingsCard>
   )
 }

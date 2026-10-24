@@ -1,6 +1,6 @@
 import { api, qk, wsUrl } from '@/api/client'
 import { queryClient } from '@/api/queryClient'
-import type { Command, Device, FleetEvent, NotificationPrefs, Position, WsMessage } from '@/api/types'
+import type { Command, Device, FleetEvent, Job, NotificationPrefs, Position, WsMessage } from '@/api/types'
 import { playEventSound } from '@/lib/sound'
 import { useAlerts } from './alerts'
 import { useLive } from './live'
@@ -30,6 +30,7 @@ class LiveConnection {
   private pendingDeleted: number[] = []
   private synced = false
   private eventsInvalidateTimer: number | undefined
+  private jobsInvalidateTimer: number | undefined
 
   start(token: string) {
     if (!this.stopped && this.token === token) return
@@ -165,6 +166,28 @@ class LiveConnection {
     })
   }
 
+  /** Live job updates: patch every cached job list and the job itself; unknown jobs refresh the lists. */
+  private onJob(j: Job) {
+    let found = false
+    queryClient.setQueriesData<Job[]>({ queryKey: qk.jobs() }, (list) => {
+      if (!Array.isArray(list)) return list
+      const i = list.findIndex((x) => x.id === j.id)
+      if (i === -1) return list
+      found = true
+      const next = list.slice()
+      next[i] = j
+      return next
+    })
+    queryClient.setQueryData(qk.job(j.id), j)
+    void queryClient.invalidateQueries({ queryKey: qk.jobTimeline(j.id) })
+    if (!found && this.jobsInvalidateTimer === undefined) {
+      this.jobsInvalidateTimer = window.setTimeout(() => {
+        this.jobsInvalidateTimer = undefined
+        void queryClient.invalidateQueries({ queryKey: qk.jobs() })
+      }, 800)
+    }
+  }
+
   private onFrame(raw: unknown) {
     if (typeof raw !== 'string') return
     let msg: WsMessage
@@ -194,6 +217,19 @@ class LiveConnection {
         return
       case 'notifications':
         void queryClient.invalidateQueries({ queryKey: qk.notificationPrefs })
+        return
+      case 'job':
+        if (msg.data) this.onJob(msg.data)
+        return
+      case 'jobDeleted':
+        if (msg.data) {
+          const id = msg.data.id
+          queryClient.setQueriesData<Job[]>({ queryKey: qk.jobs() }, (l) => (Array.isArray(l) ? l.filter((x) => x.id !== id) : l))
+          queryClient.removeQueries({ queryKey: qk.job(id) })
+        }
+        return
+      case 'routes':
+        void queryClient.invalidateQueries({ queryKey: qk.routes })
         return
       default:
         return

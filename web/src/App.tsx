@@ -16,6 +16,7 @@ const DriversPage = lazy(() => import('./pages/Drivers'))
 const MaintenancePage = lazy(() => import('./pages/Maintenance'))
 const AdminPage = lazy(() => import('./pages/Admin'))
 const SharePage = lazy(() => import('./pages/Share'))
+const DispatchPage = lazy(() => import('./pages/Dispatch'))
 
 const lazyEl = (el: JSX.Element) => <Suspense fallback={<PageFallback />}>{el}</Suspense>
 
@@ -86,6 +87,7 @@ export function App() {
           />
           <Route path="/reports" element={lazyEl(<ReportsPage />)} />
           <Route path="/drivers" element={lazyEl(<DriversPage />)} />
+          <Route path="/dispatch" element={lazyEl(<DispatchPage />)} />
           <Route path="/maintenance" element={lazyEl(<MaintenancePage />)} />
           <Route path="/admin" element={lazyEl(<AdminPage />)} />
           <Route path="*" element={<Navigate to="/live" replace />} />

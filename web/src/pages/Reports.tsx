@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { subMinutes, addMinutes, startOfDay, endOfDay } from 'date-fns'
@@ -34,6 +34,13 @@ import { fmtMoney } from '@/lib/format'
 import { readLS, writeLS } from '@/lib/storage'
 import { toast } from '@/store/toast'
 import { cn } from '@/lib/cn'
+import { useAccess } from '@/lib/access'
+import type { SchedulePeriod } from '@/api/types'
+import { qk as qkeys } from '@/api/client'
+
+const SchedulesView = lazy(() => import('@/features/reports/Schedules'))
+const ScheduleDrawer = lazy(() => import('@/features/reports/Schedules').then((m) => ({ default: m.ScheduleDrawer })))
+const PRESET_TO_PERIOD: Record<PeriodPreset, SchedulePeriod> = { today: 'today', yesterday: 'yesterday', week: 'thisWeek', '7d': 'lastWeek', month: 'thisMonth', custom: 'yesterday' }
 
 interface Filters {
   type: ReportType
@@ -130,7 +137,21 @@ function rowTarget(type: string, r: ReportRow, rep: Report): { to: string; hint:
   }
 }
 
-function Catalogue({ value, onPick, autoFocus }: { value: ReportType; onPick: (t: ReportType) => void; autoFocus?: boolean }) {
+function Catalogue({
+  value,
+  onPick,
+  autoFocus,
+  schedules,
+  onSchedules,
+  schedulesActive,
+}: {
+  value: ReportType | null
+  onPick: (t: ReportType) => void
+  autoFocus?: boolean
+  schedules?: number
+  onSchedules: () => void
+  schedulesActive: boolean
+}) {
   const [q, setQ] = useState('')
   const s = q.trim().toLowerCase()
   const list = s ? REPORTS.filter((r) => `${r.label} ${r.group} ${r.description}`.toLowerCase().includes(s)) : REPORTS
@@ -163,7 +184,7 @@ function Catalogue({ value, onPick, autoFocus }: { value: ReportType; onPick: (t
               <p className="label-xs px-3 pb-1 pt-2 !text-[10.5px]">{g}</p>
               <ul className="space-y-0.5">
                 {items.map((r) => {
-                  const on = r.type === value
+                  const on = r.type === value && !schedulesActive
                   return (
                     <li key={r.type}>
                       <button
@@ -194,6 +215,26 @@ function Catalogue({ value, onPick, autoFocus }: { value: ReportType; onPick: (t
             </div>
           )
         })}
+        <div className="mb-2 border-t border-slate-200/80 pt-2 dark:border-white/[0.06]">
+          <p className="label-xs px-3 pb-1 pt-1 !text-[10.5px]">Automation</p>
+          <button
+            type="button"
+            aria-current={schedulesActive || undefined}
+            onClick={onSchedules}
+            className={cn(
+              'group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] font-medium transition-colors',
+              schedulesActive
+                ? 'bg-brand-500/15 text-navy-800 dark:bg-brand-400/[0.13] dark:text-brand-100'
+                : 'text-slate-600 hover:bg-slate-900/[0.04] hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white',
+            )}
+          >
+            <span className={cn('grid h-7 w-7 shrink-0 place-items-center rounded-lg', schedulesActive ? 'bg-brand-500 text-navy-900' : 'bg-slate-100 text-slate-500 dark:bg-white/[0.06] dark:text-slate-400')}>
+              <CalendarClock className="h-3.5 w-3.5" />
+            </span>
+            <span className="min-w-0 flex-1 truncate">Scheduled reports</span>
+            {schedules != null && schedules > 0 && <span className="tabular rounded-full bg-slate-100 px-1.5 text-[11px] font-semibold text-slate-500 dark:bg-white/[0.08] dark:text-slate-300">{schedules}</span>}
+          </button>
+        </div>
       </nav>
     </div>
   )
@@ -229,6 +270,8 @@ const ROW_NOUN: Partial<Record<ReportType, string>> = {
   maintenance: 'Items',
   expenses: 'Expenses',
   systemLog: 'Trackers',
+  fuel: 'Fuel sensors',
+  temperature: 'Sensors',
 }
 
 function Kpis({ def, report, currency }: { def: ReportDef; report: Report; currency: string }) {
@@ -344,6 +387,14 @@ export default function ReportsPage() {
   const drivers = useDrivers()
   const currency = useCurrency()
   const def = reportDef(f.type) ?? REPORTS[0]
+  const { canManage } = useAccess()
+  const showSchedules = params.get('view') === 'schedules'
+  const [scheduling, setScheduling] = useState(false)
+  const schedulesQ = useQuery({ queryKey: qkeys.reportSchedules, queryFn: api.reportSchedules, staleTime: 60_000, meta: { silent: true }, retry: false })
+  const openSchedules = () => {
+    setParams({ view: 'schedules' }, { replace: true })
+    setPickerOpen(false)
+  }
 
   // deep links: /reports?type=trips&driverId=3&deviceId=4
   const paramKey = params.toString()
@@ -364,6 +415,7 @@ export default function ReportsPage() {
 
   useEffect(() => {
     writeLS(LS_KEY, JSON.stringify(f))
+    if (params.get('view') === 'schedules') return
     if (params.get('type') !== f.type && !params.get('driverId') && !params.get('deviceId')) setParams({ type: f.type }, { replace: true })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [f])
@@ -397,6 +449,7 @@ export default function ReportsPage() {
   const pick = (type: ReportType) => {
     setF((s) => ({ ...s, type }))
     setPickerOpen(false)
+    if (params.get('view')) setParams({ type }, { replace: true })
   }
   const activeFilters = f.deviceIds.length + (f.groupId != null ? 1 : 0) + (f.driverId != null ? 1 : 0)
   const data = report.data
@@ -410,9 +463,30 @@ export default function ReportsPage() {
           <h1 className="text-[16px] font-semibold tracking-tight text-slate-900 dark:text-white">Reports</h1>
           <p className="text-[12px] text-slate-500 dark:text-slate-400">{REPORTS.length} reports · CSV, Excel & PDF</p>
         </div>
-        <Catalogue value={f.type} onPick={pick} />
+        <Catalogue value={f.type} onPick={pick} schedules={schedulesQ.data?.length} onSchedules={openSchedules} schedulesActive={showSchedules} />
       </aside>
 
+      {showSchedules ? (
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-y-auto p-3 sm:p-4 lg:overflow-hidden lg:p-5">
+          <div className="flex shrink-0 items-start gap-3">
+            <span className="hidden h-11 w-11 shrink-0 place-items-center rounded-xl bg-brand-500 text-navy-900 shadow-sm sm:grid">
+              <CalendarClock className="h-5 w-5" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <button type="button" onClick={() => setPickerOpen(true)} className="flex max-w-full items-center gap-1.5 rounded-lg text-left lg:pointer-events-none" aria-label="Choose report">
+                <h2 className="truncate text-[18px] font-semibold tracking-tight text-slate-900 dark:text-white">Scheduled reports</h2>
+                <ChevronDown className="h-4 w-4 shrink-0 text-slate-400 lg:hidden" />
+              </button>
+              <p className="mt-0.5 text-[12.5px] text-slate-500 dark:text-slate-400">
+                <span className="font-medium text-slate-600 dark:text-slate-300">Automation</span> · any report, on a timetable, to email and Telegram
+              </p>
+            </div>
+          </div>
+          <Suspense fallback={<Skeleton className="h-64 rounded-2xl" />}>
+            <SchedulesView />
+          </Suspense>
+        </div>
+      ) : (
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-y-auto p-3 sm:p-4 lg:overflow-hidden lg:p-5">
         {/* header */}
         <div className="flex shrink-0 flex-wrap items-start gap-3">
@@ -448,6 +522,11 @@ export default function ReportsPage() {
             >
               <RefreshCw className={cn('h-4 w-4', fetching && 'animate-spin')} />
             </IconButton>
+            {canManage && (
+              <Button icon={<CalendarClock className="h-4 w-4" />} onClick={() => setScheduling(true)} title="Send this report automatically by email or Telegram">
+                <span className="hidden sm:inline">Schedule</span>
+              </Button>
+            )}
             <ExportMenu type={f.type} query={query} disabled={!!rangeError} />
           </div>
         </div>
@@ -590,9 +669,24 @@ export default function ReportsPage() {
         </div>
       </div>
 
+      )}
+
+      {scheduling && (
+        <Suspense fallback={null}>
+          <ScheduleDrawer
+            initial={null}
+            prefill={{ reportType: f.type, filters: { deviceIds: f.deviceIds, groupId: f.groupId, driverId: f.driverId }, period: PRESET_TO_PERIOD[f.preset] }}
+            onClose={() => {
+              setScheduling(false)
+              void schedulesQ.refetch()
+            }}
+          />
+        </Suspense>
+      )}
+
       {/* catalogue (phone / tablet) */}
       <Modal open={pickerOpen} onClose={() => setPickerOpen(false)} title="Choose a report" className="flex max-h-[80vh] flex-col !p-0 [&>h2]:px-4 [&>h2]:pt-4">
-        <Catalogue value={f.type} onPick={pick} />
+        <Catalogue value={f.type} onPick={pick} schedules={schedulesQ.data?.length} onSchedules={openSchedules} schedulesActive={showSchedules} />
       </Modal>
     </div>
   )

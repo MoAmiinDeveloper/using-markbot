@@ -11,6 +11,33 @@ import { BottomNav, NavRail } from './NavRail'
 import { TopBar } from './TopBar'
 import { NAV } from './nav'
 import { normRole } from '@/lib/access'
+import { Smartphone } from 'lucide-react'
+import { Button } from '@/components/ui/Button'
+import { APP_NAME } from '@/config'
+import { Logo } from './Logo'
+
+/** Driver accounts (Phase 4a) only work in the driver app — the web console APIs return 403 for them. */
+function DriverNotice() {
+  const { user, logout } = useAuth()
+  return (
+    <div className="grid h-full place-items-center bg-navy-800 p-6 text-center">
+      <div className="max-w-sm">
+        <Logo size="h-12" className="mx-auto text-white" />
+        <span className="mx-auto mt-8 grid h-14 w-14 place-items-center rounded-2xl bg-brand-500 text-navy-900">
+          <Smartphone className="h-7 w-7" />
+        </span>
+        <h1 className="mt-4 text-[18px] font-semibold text-white">Use the {APP_NAME} Driver app</h1>
+        <p className="mt-2 text-[13px] text-white/70">
+          {user?.name ? `${user.name}, your` : 'Your'} account is a driver login. Sign in with the same email and password in the Android
+          driver app to see and complete your jobs.
+        </p>
+        <Button variant="primary" className="mt-6" onClick={() => logout()}>
+          Sign out
+        </Button>
+      </div>
+    </div>
+  )
+}
 
 export function AppShell() {
   const token = useAuth((s) => s.token)
@@ -48,6 +75,7 @@ export function AppShell() {
   }, [token, setUser, qc])
 
   if (!token) return <Navigate to="/login" replace state={{ from: loc.pathname + loc.search }} />
+  if (user?.role === 'driver') return <DriverNotice />
 
   const title = NAV.find((n) => loc.pathname.startsWith(n.to))?.label ?? ''
   if (loc.pathname.startsWith('/admin') && user && normRole(user.role) !== 'admin') return <Navigate to="/live" replace />

@@ -1,4 +1,6 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { lazy, Suspense, useMemo, useState, type FormEvent } from 'react'
+import { Tabs } from '@/components/ui/Tabs'
+const SensorsPanel = lazy(() => import('@/features/sensors/SensorsPanel'))
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { ArrowDown, ArrowUp, ArrowUpDown, Cpu, History, Map, Pencil, Plus, Search, SearchX, Trash2 } from 'lucide-react'
@@ -44,8 +46,10 @@ function validate(v: FormValues, bridged: boolean) {
   return e
 }
 
-function DeviceForm({ initial, onClose }: { initial: Device | null; onClose: () => void }) {
+function DeviceForm({ initial, onClose, startTab = 'details' }: { initial: Device | null; onClose: () => void; startTab?: 'details' | 'sensors' }) {
   const bridged = initial?.source === 'traccar'
+  const [tab, setTab] = useState<'details' | 'sensors'>(initial ? startTab : 'details')
+  const { canManage } = useAccess()
   const [v, setV] = useState<FormValues>(() =>
     initial
       ? {
@@ -111,16 +115,35 @@ function DeviceForm({ initial, onClose }: { initial: Device | null; onClose: () 
       open
       onClose={onClose}
       title={initial ? 'Edit device' : 'Add device'}
-      subtitle={initial ? initial.imei : 'Register a tracker by its IMEI'}
+      subtitle={initial ? `${initial.name} · ${initial.imei}` : 'Register a tracker by its IMEI'}
+      wide={tab === 'sensors'}
       footer={
+        tab === 'sensors' ? undefined : (
         <>
           <Button onClick={onClose}>Cancel</Button>
           <Button variant="primary" type="submit" form="device-form" loading={m.isPending}>
             {initial ? 'Save changes' : 'Add device'}
           </Button>
         </>
+        )
       }
     >
+      {initial && (
+        <Tabs<'details' | 'sensors'>
+          className="-mt-3 mb-4"
+          value={tab}
+          onChange={setTab}
+          tabs={[
+            { id: 'details', label: 'Details' },
+            { id: 'sensors', label: 'Sensors', count: initial.sensors?.length || undefined },
+          ]}
+        />
+      )}
+      {tab === 'sensors' && initial ? (
+        <Suspense fallback={<Skeleton className="h-40 rounded-xl" />}>
+          <SensorsPanel device={initial} canEdit={canManage} />
+        </Suspense>
+      ) : (
       <form id="device-form" onSubmit={submit} className="space-y-4" noValidate>
         {serverError && (
           <div role="alert" className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-[12.5px] text-rose-700 dark:text-rose-300">
@@ -238,6 +261,7 @@ function DeviceForm({ initial, onClose }: { initial: Device | null; onClose: () 
           </div>
         )}
       </form>
+      )}
     </Drawer>
   )
 }
@@ -297,6 +321,18 @@ export default function DevicesPage() {
   const [status, setStatus] = useState<DeviceStatus | 'all'>('all')
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: 'name', dir: 1 })
   const [editing, setEditing] = useState<Device | null | 'new'>(null)
+  const [startTab, setStartTab] = useState<'details' | 'sensors'>('details')
+  // deep link from the live panel: /devices?sensors=<id>
+  const sensorsParam = new URLSearchParams(window.location.search).get('sensors')
+  const [linked, setLinked] = useState(false)
+  if (!linked && sensorsParam && loaded) {
+    const d = devices.find((x) => x.id === Number(sensorsParam))
+    setLinked(true)
+    if (d && canManageDevice(d)) {
+      setStartTab('sensors')
+      setEditing(d)
+    }
+  }
   const [deleting, setDeleting] = useState<Device | null>(null)
 
   const del = useMutation({
@@ -502,9 +538,14 @@ export default function DevicesPage() {
                               <History className="h-3.5 w-3.5" />
                             </IconButton>
                             {canManageDevice(d) && (
+                              <>
+                              <IconButton size="sm" label={`Sensors of ${d.name}`} onClick={() => (setStartTab('sensors'), setEditing(d))}>
+                                <GaugeIcon className="h-3.5 w-3.5" />
+                              </IconButton>
                               <IconButton size="sm" label={`Edit ${d.name}`} onClick={() => setEditing(d)}>
                                 <Pencil className="h-3.5 w-3.5" />
                               </IconButton>
+                            </>
                             )}
                             {isAdmin && (
                               <IconButton size="sm" label={`Delete ${d.name}`} onClick={() => setDeleting(d)} className="hover:!bg-rose-500/10 hover:!text-rose-500">
@@ -541,9 +582,14 @@ export default function DevicesPage() {
                       </div>
                     </div>
                     {canManageDevice(d) && (
-                      <IconButton size="sm" label={`Edit ${d.name}`} onClick={() => setEditing(d)}>
+                      <>
+                      <IconButton size="sm" label={`Sensors of ${d.name}`} onClick={() => (setStartTab('sensors'), setEditing(d))}>
+                                <GaugeIcon className="h-3.5 w-3.5" />
+                              </IconButton>
+                              <IconButton size="sm" label={`Edit ${d.name}`} onClick={() => setEditing(d)}>
                         <Pencil className="h-3.5 w-3.5" />
                       </IconButton>
+                    </>
                     )}
                     {isAdmin && (
                       <IconButton size="sm" label={`Delete ${d.name}`} onClick={() => setDeleting(d)}>
@@ -558,7 +604,17 @@ export default function DevicesPage() {
         </div>
       </div>
 
-      {editing && <DeviceForm key={editing === 'new' ? 'new' : editing.id} initial={editing === 'new' ? null : editing} onClose={() => setEditing(null)} />}
+      {editing && (
+        <DeviceForm
+          key={editing === 'new' ? 'new' : editing.id}
+          initial={editing === 'new' ? null : editing}
+          startTab={startTab}
+          onClose={() => {
+            setEditing(null)
+            setStartTab('details')
+          }}
+        />
+      )}
 
       <Modal
         open={!!deleting}

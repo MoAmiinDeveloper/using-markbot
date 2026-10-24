@@ -6,7 +6,8 @@ export type EffectiveRole = 'admin' | 'manager' | 'viewer'
 /** Legacy `user` rows are managers (server migrates them; older servers still send `user`). */
 export function normRole(r: Role | string | undefined | null): EffectiveRole {
   if (r === 'admin') return 'admin'
-  if (r === 'viewer') return 'viewer'
+  // Phase 4a drivers can't use the web console's APIs; treat them as read-only if they get here
+  if (r === 'viewer' || r === 'driver') return 'viewer'
   return 'manager'
 }
 

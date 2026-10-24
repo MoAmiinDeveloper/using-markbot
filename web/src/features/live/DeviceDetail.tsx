@@ -25,6 +25,7 @@ import { useDrivers } from '@/features/common/queries'
 import { useAddress } from '@/lib/geocode'
 import { useAccess } from '@/lib/access'
 import { placeMeta } from '@/lib/ops'
+const SensorTiles = lazy(() => import('@/features/sensors/SensorTiles').then((m) => ({ default: m.SensorTiles })))
 const ShareDialog = lazy(() => import('./ShareDialog').then((m) => ({ default: m.ShareDialog })))
 import type { Device } from '@/api/types'
 import { CategoryIcon, categoryMeta } from '@/lib/category'
@@ -220,6 +221,12 @@ export function DeviceDetail({
                 </a>
               )}
             </div>
+
+            {!!device.sensors?.length && (
+              <Suspense fallback={<div className="skeleton mt-3 h-24 rounded-xl" />}>
+                <SensorTiles device={device} canConfigure={canShare} />
+              </Suspense>
+            )}
 
             <div className="mt-3 grid grid-cols-2 gap-2">
               <Metric

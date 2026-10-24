@@ -43,6 +43,20 @@ import type {
   TestNotificationResult,
   Trip,
   User,
+  FleetRoute,
+  Job,
+  JobEvent,
+  JobInput,
+  JobQuery,
+  JobStatus,
+  Attachment,
+  AttachmentKind,
+  ReportSchedule,
+  ReportScheduleInput,
+  RouteInput,
+  ScheduleRun,
+  Sensor,
+  SensorInput,
 } from './types'
 
 export class ApiError extends Error {
@@ -117,8 +131,8 @@ export const api = {
   updateDevice: (id: number, input: Partial<DeviceInput>) => request<Device>('PATCH', `/devices/${id}`, input),
   deleteDevice: (id: number) => request<void>('DELETE', `/devices/${id}`),
 
-  positions: (id: number, from: string, to: string, limit?: number) =>
-    request<Position[]>('GET', `/devices/${id}/positions`, undefined, { from, to, limit }),
+  positions: (id: number, from: string, to: string, limit?: number, sensors?: boolean) =>
+    request<Position[]>('GET', `/devices/${id}/positions`, undefined, { from, to, limit, sensors: sensors ? 1 : undefined }),
   trips: (id: number, from: string, to: string) =>
     request<Trip[]>('GET', `/devices/${id}/trips`, undefined, { from, to }),
 
@@ -213,6 +227,97 @@ export const api = {
   // reports & dashboard
   report: (type: string, q: ReportQuery) => request<Report>('GET', `/reports/${type}`, undefined, reportQuery(q)),
   dashboard: (days: number) => request<DashboardData>('GET', '/dashboard', undefined, { days }),
+
+  // ---- Phase 4a: dispatch
+  jobs: (q: JobQuery = {}) =>
+    request<Job[]>('GET', '/jobs', undefined, { status: q.status, deviceId: q.deviceId, driverId: q.driverId, from: q.from, to: q.to, q: q.q }),
+  job: (id: number) => request<Job>('GET', `/jobs/${id}`),
+  createJob: (input: JobInput) => request<Job>('POST', '/jobs', input),
+  updateJob: (id: number, input: Partial<JobInput>) => request<Job>('PATCH', `/jobs/${id}`, input),
+  deleteJob: (id: number) => request<void>('DELETE', `/jobs/${id}`),
+  setJobStatus: (id: number, status: JobStatus, reason?: string) =>
+    request<Job>('POST', `/jobs/${id}/status`, reason ? { status, reason } : { status }),
+  jobTimeline: (id: number) => request<JobEvent[]>('GET', `/jobs/${id}/timeline`),
+  uploadJobAttachment: (id: number, file: File, kind: AttachmentKind, stopId?: number | null) => {
+    const fd = new FormData()
+    fd.set('file', file)
+    fd.set('kind', kind)
+    if (stopId != null) fd.set('stopId', String(stopId))
+    return upload<Attachment>(`/jobs/${id}/attachments`, fd)
+  },
+  createDriverAccount: (driverId: number, email: string, password: string) =>
+    request<User>('POST', `/drivers/${driverId}/account`, { email, password }),
+  deleteDriverAccount: (driverId: number) => request<void>('DELETE', `/drivers/${driverId}/account`),
+
+  // routes
+  routes: () => request<FleetRoute[]>('GET', '/routes'),
+  createRoute: (input: RouteInput) => request<FleetRoute>('POST', '/routes', input),
+  updateRoute: (id: number, input: Partial<RouteInput>) => request<FleetRoute>('PATCH', `/routes/${id}`, input),
+  deleteRoute: (id: number) => request<void>('DELETE', `/routes/${id}`),
+  routeFromTrip: (input: { deviceId: number; from: string; to: string; name: string; color?: string; corridor?: number; minDeviationSeconds?: number; deviceIds?: number[] }) =>
+    request<FleetRoute>('POST', '/routes/from-trip', input),
+
+  // scheduled reports
+  reportSchedules: () => request<ReportSchedule[]>('GET', '/report-schedules'),
+  createReportSchedule: (input: ReportScheduleInput) => request<ReportSchedule>('POST', '/report-schedules', input),
+  updateReportSchedule: (id: number, input: Partial<ReportScheduleInput>) => request<ReportSchedule>('PATCH', `/report-schedules/${id}`, input),
+  deleteReportSchedule: (id: number) => request<void>('DELETE', `/report-schedules/${id}`),
+  runReportSchedule: (id: number) => request<ScheduleRun>('POST', `/report-schedules/${id}/run`),
+  reportSchedule: (id: number) => request<ReportSchedule>('GET', `/report-schedules/${id}`),
+  reportScheduleRuns: (id: number) => request<ScheduleRun[]>('GET', `/report-schedules/${id}/runs`),
+
+  // email
+  testSmtp: (to?: string) => request<{ sent: boolean; to: string }>('POST', '/settings/smtp/test', to ? { to } : {}),
+
+  // sensors
+  sensors: (deviceId?: number) => request<Sensor[]>('GET', '/sensors', undefined, { deviceId }),
+  createSensor: (input: SensorInput) => request<Sensor>('POST', '/sensors', input),
+  updateSensor: (id: number, input: Partial<SensorInput>) => request<Sensor>('PATCH', `/sensors/${id}`, input),
+  deleteSensor: (id: number) => request<void>('DELETE', `/sensors/${id}`),
+}
+
+/** Multipart upload (no JSON content-type: the browser sets the boundary). */
+async function upload<T>(path: string, body: FormData): Promise<T> {
+  const token = useAuth.getState().token
+  let res: Response
+  try {
+    res = await fetch(`${API_BASE}${path}`, { method: 'POST', headers: token ? { Authorization: `Bearer ${token}` } : {}, body })
+  } catch {
+    throw new ApiError(0, 'Cannot reach the server. Check your connection.')
+  }
+  if (res.status === 401) {
+    useAuth.getState().logout('expired')
+    throw new ApiError(401, 'Your session has expired. Please sign in again.')
+  }
+  const text = await res.text()
+  let data: unknown
+  try {
+    data = text ? JSON.parse(text) : undefined
+  } catch {
+    data = undefined
+  }
+  if (!res.ok) {
+    const msg = data && typeof data === 'object' && 'error' in data ? String((data as { error: unknown }).error) : `Upload failed (${res.status})`
+    throw new ApiError(res.status, msg)
+  }
+  return data as T
+}
+
+/**
+ * Fetch an authenticated file (job attachments) and return an object URL. `url` may be the
+ * absolute API path from the server (`/api/v1/files/9`) or relative to the API base.
+ */
+export async function fetchFileBlob(url: string): Promise<{ url: string; type: string }> {
+  const token = useAuth.getState().token
+  const full = url.startsWith('/api/') || /^https?:/.test(url) ? url : `${API_BASE}${url.startsWith('/') ? '' : '/'}${url}`
+  const res = await fetch(full, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+  if (res.status === 401) {
+    useAuth.getState().logout('expired')
+    throw new ApiError(401, 'Your session has expired. Please sign in again.')
+  }
+  if (!res.ok) throw new ApiError(res.status, `Could not load the file (${res.status})`)
+  const blob = await res.blob()
+  return { url: URL.createObjectURL(blob), type: blob.type }
 }
 
 function reportQuery(q: ReportQuery, format?: ReportFormat): Query {
@@ -286,6 +391,13 @@ export const qk = {
   geocode: (lat: number, lng: number) => ['geocode', lat.toFixed(4), lng.toFixed(4)] as const,
   report: (type: string, q: ReportQuery) => ['report', type, q] as const,
   dashboard: (days: number) => ['dashboard', days] as const,
+  jobs: (q?: JobQuery) => (q ? (['jobs', q] as const) : (['jobs'] as const)),
+  job: (id: number) => ['job', id] as const,
+  jobTimeline: (id: number) => ['jobTimeline', id] as const,
+  routes: ['routes'] as const,
+  reportSchedules: ['reportSchedules'] as const,
+  scheduleRuns: (id: number) => ['scheduleRuns', id] as const,
+  sensors: (deviceId?: number) => (deviceId != null ? (['sensors', deviceId] as const) : (['sensors'] as const)),
 }
 
 export function wsUrl(token: string): string {

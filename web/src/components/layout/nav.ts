@@ -1,4 +1,10 @@
 import {
+  CalendarClock,
+  ClipboardList,
+  Gauge,
+  Mail,
+  Route,
+  Smartphone,
   BellRing,
   ChartColumn,
   Cpu,
@@ -42,13 +48,39 @@ export const NAV: NavItem[] = [
   { to: '/alerts', label: 'Alerts', icon: BellRing, section: 'monitor', primary: true, keywords: 'events notifications alarms', description: 'Every event, filterable' },
   { to: '/history', label: 'History', icon: History, section: 'monitor', keywords: 'playback route replay trips', description: 'Replay routes and trips' },
   { to: '/reports', label: 'Reports', icon: ChartColumn, section: 'analyse', primary: true, keywords: 'export excel pdf csv', description: 'Activity, alert, driver and fleet reports' },
-  { to: '/geofences', label: 'Geofences', icon: Hexagon, section: 'manage', keywords: 'zones places poi', description: 'Zones and points of interest' },
+  { to: '/dispatch', label: 'Dispatch', icon: ClipboardList, section: 'manage', keywords: 'jobs deliveries orders tasks pod proof signature stops driver app', description: 'Jobs, stops and proof of delivery' },
+  { to: '/geofences', label: 'Geofences', icon: Hexagon, section: 'manage', keywords: 'zones places poi routes corridor', description: 'Zones, places and planned routes' },
   { to: '/drivers', label: 'Drivers', icon: IdCard, section: 'manage', keywords: 'ibutton rfid license score', description: 'Drivers, licences and behaviour' },
   { to: '/maintenance', label: 'Maintenance', icon: Wrench, section: 'manage', keywords: 'service reminders documents expenses fuel', description: 'Service schedules, documents & expenses' },
   { to: '/devices', label: 'Devices', icon: Cpu, section: 'manage', keywords: 'trackers imei odometer', description: 'Trackers and vehicle settings' },
   { to: '/admin', label: 'Users & Groups', icon: ShieldCheck, section: 'system', adminOnly: true, keywords: 'admin users roles groups permissions', description: 'Accounts, roles and vehicle groups' },
   { to: '/settings', label: 'Settings', icon: Settings, section: 'system', keywords: 'notifications telegram profile password', description: 'Notifications, rules and your profile' },
 ]
+
+/** Screens inside pages, offered by the global quick search only. */
+export interface SubScreen {
+  to: string
+  label: string
+  icon: LucideIcon
+  keywords: string
+  description: string
+  manage?: boolean
+  adminOnly?: boolean
+}
+export const SUB_SCREENS: SubScreen[] = [
+  { to: '/dispatch?new=1', label: 'New job', icon: ClipboardList, keywords: 'create job delivery order dispatch', description: 'Dispatch · create a job with stops', manage: true },
+  { to: '/geofences?tab=routes', label: 'Routes', icon: Route, keywords: 'routes path corridor deviation planned', description: 'Geofences · planned routes & deviation alerts' },
+  { to: '/reports?view=schedules', label: 'Scheduled reports', icon: CalendarClock, keywords: 'schedules email telegram automatic daily weekly', description: 'Reports · automatic delivery by email & Telegram' },
+  { to: '/reports?type=fuel', label: 'Fuel report', icon: Gauge, keywords: 'fuel sensor drain refuel consumption', description: 'Reports · levels, refuels and drains' },
+  { to: '/devices', label: 'Sensors', icon: Gauge, keywords: 'sensors fuel temperature calibration io', description: 'Devices · edit a device → Sensors', manage: true },
+  { to: '/settings#email', label: 'Email (SMTP)', icon: Mail, keywords: 'smtp email mail server', description: 'Settings · outgoing email', adminOnly: true },
+  { to: '/settings#driver-app', label: 'Driver app', icon: Smartphone, keywords: 'driver app phone tracking android', description: 'Settings · driver app tracking', adminOnly: true },
+]
+
+export function useSubScreens(): SubScreen[] {
+  const { isAdmin, canManage } = useAccess()
+  return SUB_SCREENS.filter((s) => (!s.adminOnly || isAdmin) && (!s.manage || canManage))
+}
 
 /** Nav items the current user may open. */
 export function useNav(): NavItem[] {

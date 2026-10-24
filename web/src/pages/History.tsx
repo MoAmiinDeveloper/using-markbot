@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { endOfDay, format, startOfDay, subDays, subHours } from 'date-fns'
 import { ArrowRight, ChevronDown, Clock, Gauge, MapPinOff, Route, Ruler, TrendingUp } from 'lucide-react'
-import { api } from '@/api/client'
+import { api, qk } from '@/api/client'
 import type { Trip } from '@/api/types'
 import { MapCanvas, useMapCtx } from '@/components/map/MapCanvas'
 import { MapControls } from '@/components/map/MapControls'
@@ -146,8 +146,8 @@ export default function HistoryPage() {
 
   const enabled = deviceId != null && rangeValid
   const positionsQ = useQuery({
-    queryKey: ['positions', deviceId, from, to],
-    queryFn: () => api.positions(deviceId!, from, to, LIMIT),
+    queryKey: ['positions', deviceId, from, to, 'sensors'],
+    queryFn: () => api.positions(deviceId!, from, to, LIMIT, true),
     enabled,
   })
   const tripsQ = useQuery({
@@ -156,6 +156,7 @@ export default function HistoryPage() {
     enabled,
   })
 
+  const sensorsQ = useQuery({ queryKey: qk.sensors(deviceId ?? 0), queryFn: () => api.sensors(deviceId!), enabled: deviceId != null, staleTime: 5 * 60_000, meta: { silent: true } })
   const track = useMemo(() => (positionsQ.data ? buildTrack(positionsQ.data) : null), [positionsQ.data])
   const stats = useMemo(() => (track ? computeStats(track) : null), [track])
   const trips = useMemo(() => tripsQ.data ?? [], [tripsQ.data])
@@ -402,7 +403,7 @@ export default function HistoryPage() {
 
           {track && track.positions.length > 1 && (
             <div className="absolute inset-x-2 bottom-2 md:bottom-4 md:left-[384px] md:right-16 lg:left-[400px] lg:right-auto lg:w-[min(720px,calc(100%-480px))]">
-              <Playback track={track} seek={seek} />
+              <Playback track={track} seek={seek} sensors={sensorsQ.data} />
             </div>
           )}
         </div>

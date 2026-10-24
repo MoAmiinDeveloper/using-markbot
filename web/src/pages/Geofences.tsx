@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft,
@@ -690,21 +690,30 @@ function ShapeSummary({ editor, onDraft, error }: { editor: Editor; onDraft: (d:
 }
 
 
-type GeoTab = 'geofences' | 'places'
+type GeoTab = 'geofences' | 'places' | 'routes'
+const RoutesView = lazy(() => import('@/features/routes/RoutesView'))
 
 export default function GeofencesPage() {
   const [params, setParams] = useSearchParams()
-  const tab: GeoTab = params.get('tab') === 'places' ? 'places' : 'geofences'
+  const t = params.get('tab')
+  const tab: GeoTab = t === 'places' || t === 'routes' ? t : 'geofences'
   const tabs = (
     <Segmented<GeoTab>
       label="Geofences or places"
       value={tab}
-      onChange={(t) => setParams(t === 'places' ? { tab: t } : {}, { replace: true })}
+      onChange={(t) => setParams(t !== 'geofences' ? { tab: t } : {}, { replace: true })}
       options={[
         { id: 'geofences', label: 'Geofences' },
         { id: 'places', label: 'Places' },
+        { id: 'routes', label: 'Routes' },
       ]}
     />
   )
+  if (tab === 'routes')
+    return (
+      <Suspense fallback={null}>
+        <RoutesView tabs={tabs} />
+      </Suspense>
+    )
   return tab === 'places' ? <PlacesView tabs={tabs} /> : <GeofencesView tabs={tabs} />
 }

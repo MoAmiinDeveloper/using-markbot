@@ -1,13 +1,13 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Bell, Bot, Coins, Gauge, LogOut, Moon, Sun, UserRound, Waypoints, type LucideIcon } from 'lucide-react'
+import { Bell, Bot, Coins, Gauge, LogOut, Mail, Moon, Smartphone, Sun, UserRound, Waypoints, type LucideIcon } from 'lucide-react'
 import { api, qk } from '@/api/client'
 import { useAuth } from '@/store/auth'
 import { useUi } from '@/store/ui'
 import { Button } from '@/components/ui/Button'
 import { Skeleton } from '@/components/ui/Misc'
 import { NotificationsSection } from '@/features/settings/Notifications'
-import { AlertRulesSection, OperationsSection, TelegramBotSection, TraccarSection } from '@/features/settings/AdminSections'
+import { AlertRulesSection, DriverAppSection, EmailSection, OperationsSection, TelegramBotSection, TraccarSection } from '@/features/settings/AdminSections'
 import { ProfileForm } from '@/features/settings/Profile'
 import { RoleBadge } from '@/components/ui/Badges'
 import { SettingsCard } from '@/features/settings/ui'
@@ -82,6 +82,8 @@ const SECTIONS: Array<{ id: string; label: string; icon: LucideIcon; admin?: boo
   { id: 'rules', label: 'Alert rules', icon: Gauge, admin: true },
   { id: 'operations', label: 'Fleet operations', icon: Coins, admin: true },
   { id: 'telegram', label: 'Telegram bot', icon: Bot, admin: true },
+  { id: 'email', label: 'Email (SMTP)', icon: Mail, admin: true },
+  { id: 'driver-app', label: 'Driver app', icon: Smartphone, admin: true },
   { id: 'traccar', label: 'Traccar bridge', icon: Waypoints, admin: true },
   { id: 'account', label: 'Account', icon: UserRound },
 ]
@@ -109,6 +111,13 @@ export default function SettingsPage() {
   }, [isAdmin, settings.isSuccess])
 
   const s = settings.data
+  // deep links like /settings#email (global search)
+  useEffect(() => {
+    const id = window.location.hash.slice(1)
+    if (!id || !settings.isSuccess) return
+    const t = window.setTimeout(() => document.getElementById(id)?.scrollIntoView({ block: 'start' }), 80)
+    return () => window.clearTimeout(t)
+  }, [settings.isSuccess])
   const adminBody = (node: (x: NonNullable<typeof s>) => ReactNode, id: string) =>
     s ? node(s) : settings.isLoading ? <Skeleton key={id} className="h-48 rounded-2xl" /> : null
 
@@ -152,6 +161,8 @@ export default function SettingsPage() {
                 {adminBody((x) => <AlertRulesSection settings={x} />, 'rules')}
                 {adminBody((x) => <OperationsSection settings={x} />, 'operations')}
                 {adminBody((x) => <TelegramBotSection settings={x} />, 'telegram')}
+                {adminBody((x) => <EmailSection settings={x} />, 'email')}
+                {adminBody((x) => <DriverAppSection settings={x} />, 'driver-app')}
                 {adminBody((x) => <TraccarSection settings={x} />, 'traccar')}
                 {settings.isError && (
                   <p className="card px-4 py-3 text-[12.5px] text-slate-500">Workspace settings are unavailable on this server.</p>

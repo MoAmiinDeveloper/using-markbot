@@ -45,6 +45,8 @@ type User struct {
 	PasswordHash string     `json:"-"`
 	CreatedAt    time.Time  `json:"createdAt"`
 	LastLoginAt  *time.Time `json:"lastLoginAt"`
+	// TelegramLinked is only filled by Users (the admin list).
+	TelegramLinked bool `json:"telegramLinked"`
 }
 
 const userColumns = `id, email, name, role, active, password_hash, created_at, last_login_at`
@@ -293,10 +295,28 @@ func (s *Store) Users(ctx context.Context) ([]User, error) {
 		return nil, err
 	}
 	out, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (User, error) { return s.scanUser(r) })
+	if err != nil {
+		return nil, err
+	}
 	if out == nil {
 		out = []User{}
 	}
-	return out, err
+	linked := make(map[int64]bool)
+	lrows, err := s.pool.Query(ctx, `SELECT user_id FROM telegram_links`)
+	if err != nil {
+		return nil, err
+	}
+	ids, err := pgx.CollectRows(lrows, pgx.RowTo[int64])
+	if err != nil {
+		return nil, err
+	}
+	for _, id := range ids {
+		linked[id] = true
+	}
+	for i := range out {
+		out[i].TelegramLinked = linked[out[i].ID]
+	}
+	return out, nil
 }
 
 // EnsureAdmin creates the default admin account when no users exist yet.

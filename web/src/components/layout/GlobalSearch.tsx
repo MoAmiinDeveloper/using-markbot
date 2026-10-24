@@ -6,7 +6,7 @@ import { CategoryIcon } from '@/lib/category'
 import { StatusPill, Kbd } from '@/components/ui/Misc'
 import { REPORTS } from '@/features/reports/catalog'
 import { cn } from '@/lib/cn'
-import { useNav } from './nav'
+import { useNav, useSubScreens } from './nav'
 
 interface Hit {
   key: string
@@ -24,6 +24,7 @@ const match = (s: string, ...fields: Array<string | undefined>) => fields.some((
 export function GlobalSearch({ className }: { className?: string }) {
   const devices = useDeviceList()
   const nav = useNav()
+  const subs = useSubScreens()
   const go = useNavigate()
   const [q, setQ] = useState('')
   const [open, setOpen] = useState(false)
@@ -34,9 +35,9 @@ export function GlobalSearch({ className }: { className?: string }) {
   const results = useMemo<Hit[]>(() => {
     const s = q.trim().toLowerCase()
     if (!s) return []
-    const screens: Hit[] = nav
+    const screens: Hit[] = [...nav, ...subs]
       .filter((n) => match(s, n.label, n.keywords))
-      .slice(0, 4)
+      .slice(0, 5)
       .map((n) => ({
         key: `s${n.to}`,
         kind: 'Screens',
@@ -68,7 +69,7 @@ export function GlobalSearch({ className }: { className?: string }) {
         right: <StatusPill status={d.status} />,
       }))
     return [...vehicles, ...reports, ...screens]
-  }, [devices, nav, q])
+  }, [devices, nav, subs, q])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
