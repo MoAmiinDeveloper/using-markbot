@@ -62,6 +62,8 @@ export interface Position {
 }
 
 export interface Device {
+  /** Client-only: earlier fixes [lng, lat] of the last live batch, oldest first (for smooth animation). */
+  trail?: Array<[number, number]>
   id: number
   name: string
   imei: string

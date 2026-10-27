@@ -5,7 +5,9 @@ import { cn } from '@/lib/cn'
 import { useMapCtx } from './MapCanvas'
 
 const STYLES: Array<{ id: MapStyleId; label: string; swatch: string }> = [
-  { id: 'auto', label: 'Match theme', swatch: 'linear-gradient(135deg,#e5e7eb 50%,#111827 50%)' },
+  { id: 'auto', label: 'Default (Streets)', swatch: 'linear-gradient(135deg,#e5e7eb 50%,#111827 50%)' },
+  { id: 'streets', label: 'Streets', swatch: 'linear-gradient(135deg,#f8f4ec,#cfe3c4 55%,#f2c46c)' },
+  { id: 'osm', label: 'OpenStreetMap', swatch: 'linear-gradient(135deg,#f2efe9,#aad3df 55%,#e8a07a)' },
   { id: 'light', label: 'Light', swatch: 'linear-gradient(135deg,#f3f4f6,#d1d5db)' },
   { id: 'dark', label: 'Dark', swatch: 'linear-gradient(135deg,#1f2937,#030712)' },
   { id: 'satellite', label: 'Satellite', swatch: 'linear-gradient(135deg,#365314,#1e3a8a 60%,#a16207)' },

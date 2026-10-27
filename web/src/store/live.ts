@@ -42,14 +42,22 @@ export const useLive = create<LiveState>((set) => ({
     set((s) => {
       const byId = { ...s.byId }
       for (const d of devices) byId[d.id] = d
-      for (const p of positions) {
+      // Trackers often send several fixes at once; keep the earlier ones of this
+      // batch as a trail so the map can drive the marker along the real path.
+      const trails = new Map<number, Array<[number, number]>>()
+      const sorted = [...positions].sort((a, b) => Date.parse(a.time) - Date.parse(b.time))
+      for (const p of sorted) {
         const cur = byId[p.deviceId]
         if (!cur) continue
         // ignore out-of-order fixes (e.g. buffered records replayed by the tracker)
         if (cur.position && Date.parse(cur.position.time) > Date.parse(p.time)) continue
+        let trail = trails.get(p.deviceId)
+        if (!trail) trails.set(p.deviceId, (trail = []))
+        if (cur.position && trail.length < 200) trail.push([cur.position.lng, cur.position.lat])
         byId[p.deviceId] = {
           ...cur,
           position: p,
+          trail,
           lastSeen: p.serverTime || p.time,
           status: statusFromPosition(p),
         }

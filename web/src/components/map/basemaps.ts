@@ -1,8 +1,11 @@
 import type { StyleSpecification } from 'maplibre-gl'
 
-export type BasemapId = 'light' | 'dark' | 'satellite'
+export type BasemapId = 'streets' | 'osm' | 'light' | 'dark' | 'satellite'
 
 export const BASEMAPS: Record<BasemapId, { label: string; url?: string; bg: string }> = {
+  // OpenFreeMap (free, no key): full OpenStreetMap labels incl. local Somali names.
+  streets: { label: 'Streets', url: 'https://tiles.openfreemap.org/styles/liberty', bg: '#f8f4f0' },
+  osm: { label: 'OpenStreetMap', bg: '#f2efe9' },
   light: { label: 'Light', url: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json', bg: '#eef0f3' },
   dark: { label: 'Dark', url: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json', bg: '#0e1117' },
   satellite: { label: 'Satellite', bg: '#0b0f14' },
@@ -19,10 +22,37 @@ function satelliteStyle(): StyleSpecification {
         maxzoom: 19,
         attribution: 'Imagery &copy; Esri, Maxar, Earthstar Geographics',
       },
+      // place names and boundaries on top of the imagery (hybrid view)
+      'esri-labels': {
+        type: 'raster',
+        tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}'],
+        tileSize: 256,
+        maxzoom: 19,
+      },
     },
     layers: [
       { id: 'bg', type: 'background', paint: { 'background-color': BASEMAPS.satellite.bg } },
       { id: 'esri', type: 'raster', source: 'esri' },
+      { id: 'esri-labels', type: 'raster', source: 'esri-labels' },
+    ],
+  }
+}
+
+function osmStyle(): StyleSpecification {
+  return {
+    version: 8,
+    sources: {
+      osm: {
+        type: 'raster',
+        tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+        tileSize: 256,
+        maxzoom: 19,
+        attribution: '&copy; OpenStreetMap contributors',
+      },
+    },
+    layers: [
+      { id: 'bg', type: 'background', paint: { 'background-color': BASEMAPS.osm.bg } },
+      { id: 'osm', type: 'raster', source: 'osm' },
     ],
   }
 }
@@ -54,7 +84,7 @@ export function loadBasemap(id: BasemapId): Promise<LoadedBasemap> {
   if (hit) return hit
   const url = BASEMAPS[id].url
   if (!url) {
-    const p = Promise.resolve({ style: satelliteStyle(), degraded: false })
+    const p = Promise.resolve({ style: id === 'osm' ? osmStyle() : satelliteStyle(), degraded: false })
     cache.set(id, p)
     return p
   }

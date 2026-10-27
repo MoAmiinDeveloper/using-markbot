@@ -7,7 +7,7 @@ import maplibregl, {
 } from 'maplibre-gl'
 import type { Device, DeviceStatus } from '@/api/types'
 import { STATUS_META, STATUSES } from '@/lib/status'
-import { lerpAngle } from '@/lib/geo'
+import { bearing, lerpAngle } from '@/lib/geo'
 import { useMapCtx } from './MapCanvas'
 import { vehicleIconName } from './icons'
 
@@ -16,25 +16,62 @@ const SRC_SEL = 'vehicles-selected'
 const LAYER = 'vehicles-icons'
 const LAYER_SEL = 'vehicles-selected-icon'
 const ANIM_MS = 1100
+/** longest time spent driving a marker through one batch of fixes */
+const MAX_PATH_MS = 8000
+const SEG_MS = 700
 const FRAME_MS = 33
 
 interface Anim {
-  fromLng: number
-  fromLat: number
+  /** waypoints [lng, lat], at least two (equal when static) */
+  path: Array<[number, number]>
+  /** cumulative distance (approx. metres) at each waypoint */
+  cum: number[]
   fromRot: number
-  toLng: number
-  toLat: number
   toRot: number
   t0: number
+  dur: number
 }
 
 const ease = (t: number) => (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2)
+const easeLinearish = (t: number) => (t < 0.15 ? ease(t / 0.3) * 0.3 : t > 0.85 ? 1 - ease((1 - t) / 0.3) * 0.3 : t)
+
+function makeAnim(path: Array<[number, number]>, fromRot: number, toRot: number, t0: number): Anim {
+  const cum = [0]
+  for (let i = 1; i < path.length; i++) {
+    const [x0, y0] = path[i - 1]
+    const [x1, y1] = path[i]
+    const kx = Math.cos(((y0 + y1) / 2) * (Math.PI / 180))
+    cum.push(cum[i - 1] + Math.hypot((x1 - x0) * kx, y1 - y0) * 111_320)
+  }
+  const segs = path.length - 1
+  const dur = segs <= 1 ? ANIM_MS : Math.min(MAX_PATH_MS, Math.max(ANIM_MS, segs * SEG_MS))
+  return { path, cum, fromRot, toRot, t0, dur }
+}
+
+function staticAnim(lng: number, lat: number, rot: number): Anim {
+  return { path: [[lng, lat], [lng, lat]], cum: [0, 0], fromRot: rot, toRot: rot, t0: 0, dur: ANIM_MS }
+}
 
 function interp(a: Anim, now: number): [number, number, number] {
-  const k = Math.min(1, (now - a.t0) / ANIM_MS)
-  if (k >= 1) return [a.toLng, a.toLat, a.toRot]
-  const e = ease(k)
-  return [a.fromLng + (a.toLng - a.fromLng) * e, a.fromLat + (a.toLat - a.fromLat) * e, lerpAngle(a.fromRot, a.toRot, e)]
+  const k = Math.min(1, (now - a.t0) / a.dur)
+  const last = a.path[a.path.length - 1]
+  if (k >= 1) return [last[0], last[1], a.toRot]
+  const total = a.cum[a.cum.length - 1]
+  if (a.path.length === 2 || total === 0) {
+    const e = ease(k)
+    const [f, t] = [a.path[0], last]
+    return [f[0] + (t[0] - f[0]) * e, f[1] + (t[1] - f[1]) * e, lerpAngle(a.fromRot, a.toRot, e)]
+  }
+  // multi-point path: constant-ish speed along the polyline, heading follows the road
+  const d = easeLinearish(k) * total
+  let i = 1
+  while (i < a.cum.length - 1 && a.cum[i] < d) i++
+  const span = a.cum[i] - a.cum[i - 1] || 1
+  const f = (d - a.cum[i - 1]) / span
+  const [x0, y0] = a.path[i - 1]
+  const [x1, y1] = a.path[i]
+  const rot = x0 === x1 && y0 === y1 ? a.toRot : bearing(y0, x0, y1, x1)
+  return [x0 + (x1 - x0) * f, y0 + (y1 - y0) * f, rot]
 }
 
 type FC = GeoJSON.FeatureCollection<GeoJSON.Point>
@@ -176,7 +213,7 @@ export function VehicleLayer({
       const a = anims.current.get(d.id)
       if (!a) continue
       const [lng, lat, rot] = interp(a, now)
-      if (now - a.t0 < ANIM_MS) animating = true
+      if (now - a.t0 < a.dur) animating = true
       const status = (d.status in STATUS_META ? d.status : 'offline') as DeviceStatus
       const isSel = d.id === selRef.current
       const rotates = status === 'moving' || status === 'idle'
@@ -233,18 +270,31 @@ export function VehicleLayer({
       seen.add(d.id)
       const a = anims.current.get(d.id)
       if (!a) {
-        anims.current.set(d.id, {
-          fromLng: p.lng, fromLat: p.lat, fromRot: p.course,
-          toLng: p.lng, toLat: p.lat, toRot: p.course, t0: 0,
-        })
-      } else if (a.toLng !== p.lng || a.toLat !== p.lat || a.toRot !== p.course) {
+        anims.current.set(d.id, staticAnim(p.lng, p.lat, p.course))
+      } else {
+        const last = a.path[a.path.length - 1]
+        if (last[0] === p.lng && last[1] === p.lat && a.toRot === p.course) continue
         const [lng, lat, rot] = interp(a, now)
         // big jumps (e.g. after reconnect) snap instead of sliding across the map
         const far = Math.abs(lng - p.lng) > 0.05 || Math.abs(lat - p.lat) > 0.05
-        anims.current.set(d.id, {
-          fromLng: far ? p.lng : lng, fromLat: far ? p.lat : lat, fromRot: rot,
-          toLng: p.lng, toLat: p.lat, toRot: p.course, t0: now,
-        })
+        if (far) {
+          anims.current.set(d.id, staticAnim(p.lng, p.lat, p.course))
+          continue
+        }
+        // drive through the batch's earlier fixes that come after the marker's current target
+        const path: Array<[number, number]> = [[lng, lat]]
+        const trail = d.trail ?? []
+        let started = trail.length === 0
+        for (const pt of trail) {
+          if (!started) {
+            started = pt[0] === last[0] && pt[1] === last[1]
+            continue
+          }
+          path.push(pt)
+        }
+        if (!started) path.push(...trail.slice(1)) // marker target not in trail: use all but the stale start
+        path.push([p.lng, p.lat])
+        anims.current.set(d.id, makeAnim(path, rot, p.course, now))
       }
     }
     for (const id of [...anims.current.keys()]) if (!seen.has(id)) anims.current.delete(id)
@@ -259,7 +309,7 @@ export function VehicleLayer({
   useEffect(() => {
     if (!map || followId == null) return
     const a = anims.current.get(followId)
-    if (a) map.easeTo({ center: [a.toLng, a.toLat], zoom: Math.max(map.getZoom(), 15), duration: 600 })
+    if (a) map.easeTo({ center: a.path[a.path.length - 1], zoom: Math.max(map.getZoom(), 15), duration: 600 })
     const onDrag = () => cancelRef.current?.()
     map.on('dragstart', onDrag)
     return () => {

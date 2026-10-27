@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { readLS, writeLS } from '@/lib/storage'
 
 export type Theme = 'dark' | 'light'
-export type MapStyleId = 'auto' | 'light' | 'dark' | 'satellite'
+export type MapStyleId = 'auto' | 'streets' | 'osm' | 'light' | 'dark' | 'satellite'
 
 function applyTheme(theme: Theme) {
   const root = document.documentElement
@@ -31,7 +31,9 @@ interface UiState {
 const initialTheme: Theme = readLS('fleet.theme') === 'light' ? 'light' : 'dark'
 const storedStyle = readLS('fleet.mapStyle')
 const initialStyle: MapStyleId =
-  storedStyle === 'light' || storedStyle === 'dark' || storedStyle === 'satellite' ? storedStyle : 'auto'
+  storedStyle === 'streets' || storedStyle === 'osm' || storedStyle === 'light' || storedStyle === 'dark' || storedStyle === 'satellite'
+    ? storedStyle
+    : 'auto'
 
 export const useUi = create<UiState>((set, get) => ({
   theme: initialTheme,
@@ -68,6 +70,9 @@ export const useUi = create<UiState>((set, get) => ({
 
 /** Resolve 'auto' to the theme's matching basemap. */
 export function useResolvedMapStyle(): Exclude<MapStyleId, 'auto'> {
-  const { theme, mapStyle } = useUi()
-  return mapStyle === 'auto' ? theme : mapStyle
+  const { mapStyle } = useUi()
+  // Default to the OpenStreetMap-based street map in both themes: it carries far more
+  // local place and street names (e.g. across Somalia/Somaliland) than the minimal
+  // light/dark styles, which stay available in the map style menu.
+  return mapStyle === 'auto' ? 'streets' : mapStyle
 }
