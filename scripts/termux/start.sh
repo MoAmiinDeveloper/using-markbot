@@ -32,7 +32,7 @@ done
 # Best effort only: Android often forbids `ip`, and Termux:API may be missing.
 IP="$(timeout 5 termux-wifi-connectioninfo 2>/dev/null | sed -n 's/.*"ip": *"\([0-9.]*\)".*/\1/p')" || IP=""
 echo
-echo "FleetOS is running:"
+echo "Somtel Fleet is running:"
 echo "  on this phone:      http://localhost:8080"
 if [ -n "$IP" ] && [ "$IP" != "0.0.0.0" ]; then
   echo "  same Wi-Fi network: http://$IP:8080   (trackers: $IP:5027)"

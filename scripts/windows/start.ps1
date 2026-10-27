@@ -44,7 +44,7 @@ if ($Demo) {
 
 $url = "http://localhost:$HttpPort"
 Write-Host ''
-Write-Host "FleetOS is running: $url   (trackers connect to port $GpsPort; Ctrl+C to stop)"
+Write-Host "Somtel Fleet is running: $url   (trackers connect to port $GpsPort; Ctrl+C to stop)"
 Start-Process $url
 try {
   $fleetd.WaitForExit()

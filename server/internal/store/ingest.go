@@ -62,6 +62,13 @@ func (s *Store) Authorize(ctx context.Context, imei, protocol string) (bool, err
 	return true, nil
 }
 
+// MaxFutureSkew is how far ahead of the server clock a device time may be
+// before it is replaced by the server time.
+const MaxFutureSkew = 10 * time.Minute
+
+// AttrOriginalTime keeps the device-reported time of a corrected record.
+const AttrOriginalTime = "originalDeviceTime"
+
 // Positions implements domain.Sink. The batch is written in a single round
 // trip (pgx batches run in one implicit transaction): all positions plus one
 // device_state upsert per device. Afterwards fixes newer than the cached
@@ -96,6 +103,13 @@ func (s *Store) Positions(ctx context.Context, batch []domain.Position) error {
 		p.ServerTime = p.ServerTime.UTC()
 		if p.Attributes == nil {
 			p.Attributes = map[string]any{}
+		}
+		// A tracker whose clock is not yet synced can report a time in the
+		// future. Such a record would stay "newest" forever and freeze the
+		// live position, status and event rules, so use the arrival time.
+		if p.DeviceTime.After(p.ServerTime.Add(MaxFutureSkew)) {
+			p.Attributes[AttrOriginalTime] = p.DeviceTime.Format(time.RFC3339)
+			p.DeviceTime = p.ServerTime
 		}
 	}
 	// Stable sort by device time: newest-per-device is last, publish order is chronological.
