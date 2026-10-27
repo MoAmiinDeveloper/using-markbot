@@ -3,7 +3,8 @@ import maplibregl, { type Map as MlMap } from 'maplibre-gl'
 import { DEFAULT_CENTER, DEFAULT_ZOOM } from '@/config'
 import { useResolvedMapStyle, useUi } from '@/store/ui'
 import { cn } from '@/lib/cn'
-import { loadBasemap } from './basemaps'
+import { isGoogleBasemap, loadBasemap } from './basemaps'
+import { acquireGoogleBase, googleFailed, loadGoogleMaps, onGoogleFailure, releaseGoogleBase, syncGoogleBase } from './googleBase'
 import { ensureIcons } from './icons'
 
 interface MapCtx {
@@ -31,11 +32,15 @@ export function MapCanvas({
   attribution?: boolean
 }) {
   const el = useRef<HTMLDivElement>(null)
+  const gEl = useRef<HTMLDivElement>(null)
   const [map, setMap] = useState<MlMap | null>(null)
   const [styleVersion, setStyleVersion] = useState(0)
   const [degraded, setDegraded] = useState(false)
-  const basemap = useResolvedMapStyle()
+  const wanted = useResolvedMapStyle()
   const googleKey = useUi((s) => s.googleMapsKey)
+  const [gFailed, setGFailed] = useState(googleFailed)
+  useEffect(() => onGoogleFailure(() => setGFailed(true)), [])
+  const basemap = isGoogleBasemap(wanted) && gFailed ? 'streets' : wanted
 
   // create once
   useEffect(() => {
@@ -79,7 +84,7 @@ export function MapCanvas({
   useEffect(() => {
     if (!map) return
     let cancelled = false
-    void loadBasemap(basemap, googleKey).then(({ style, degraded }) => {
+    void loadBasemap(basemap).then(({ style, degraded }) => {
       if (cancelled) return
       setDegraded(degraded)
       map.setStyle(style, { diff: false })
@@ -87,11 +92,38 @@ export function MapCanvas({
     return () => {
       cancelled = true
     }
+  }, [map, basemap])
+
+  // Google basemap: a Google map underneath the transparent MapLibre map, following its camera
+  useEffect(() => {
+    if (!map || !isGoogleBasemap(basemap) || !gEl.current) return
+    const parent = gEl.current
+    let base: ReturnType<typeof acquireGoogleBase> | null = null
+    let cancelled = false
+    const sync = () => {
+      if (!base) return
+      const c = map.getCenter()
+      syncGoogleBase(base, c.lng, c.lat, map.getZoom())
+    }
+    loadGoogleMaps(googleKey)
+      .then((gm) => {
+        if (cancelled) return
+        base = acquireGoogleBase(gm, parent, basemap === 'google' ? 'roadmap' : 'hybrid')
+        sync()
+      })
+      .catch(() => setGFailed(true))
+    map.on('move', sync)
+    return () => {
+      cancelled = true
+      map.off('move', sync)
+      if (base) releaseGoogleBase(base)
+    }
   }, [map, basemap, googleKey])
 
   return (
     <Ctx.Provider value={{ map, styleVersion }}>
       <div className={cn('overflow-hidden', className ?? 'relative')}>
+        <div ref={gEl} className="absolute inset-0" />
         <div ref={el} className="absolute inset-0" />
         {degraded && (
           <div

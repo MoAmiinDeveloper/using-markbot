@@ -561,9 +561,9 @@ export function GoogleMapsSection({ settings }: { settings: Settings }) {
         </Field>
         <Steps>
           {[
-            <>In Google Cloud Console → APIs &amp; Services, enable <b>Map Tiles API</b> (maps) and <b>Geocoding API</b> (addresses).</>,
-            <>Restrict the key: <b>Application restrictions → Websites</b> with your Somtel Fleet address, and <b>API restrictions</b> to those two APIs.</>,
-            <>Paste the key here and save. <b>Google Maps</b> becomes the default map and appears in the map style menu.</>,
+            <>In Google Cloud Console → APIs &amp; Services, enable <b>Maps JavaScript API</b> (maps) and <b>Geocoding API</b> (addresses). A Maps Demo Key already includes the maps.</>,
+            <>Restrict the key: <b>API restrictions</b> to those two APIs. If Google refuses addresses, OpenStreetMap addresses are used instead.</>,
+            <>Paste the key here, save, and reload the page (Ctrl+F5). <b>Google Maps</b> becomes the default map and appears in the map style menu.</>,
           ]}
         </Steps>
         <div className="flex justify-end gap-2">
