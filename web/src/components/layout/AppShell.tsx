@@ -5,6 +5,7 @@ import { api, qk } from '@/api/client'
 import { useAlerts } from '@/store/alerts'
 import { installAudioUnlock } from '@/lib/sound'
 import { useAuth } from '@/store/auth'
+import { useUi } from '@/store/ui'
 import { liveConnection } from '@/store/connection'
 import { startClock } from '@/store/now'
 import { BottomNav, NavRail } from './NavRail'
@@ -59,6 +60,11 @@ export function AppShell() {
     staleTime: 5 * 60_000,
     meta: { silent: true },
   })
+
+  // Google Maps key (if configured) drives the Google basemaps
+  const settingsQ = useQuery({ queryKey: qk.settings, queryFn: api.settings, enabled: !!token, staleTime: 5 * 60_000, meta: { silent: true } })
+  const setGoogleKey = useUi((s) => s.setGoogleMapsKey)
+  useEffect(() => setGoogleKey(settingsQ.data?.googleMapsKey ?? ''), [settingsQ.data?.googleMapsKey, setGoogleKey])
 
   useEffect(() => {
     if (!token) return

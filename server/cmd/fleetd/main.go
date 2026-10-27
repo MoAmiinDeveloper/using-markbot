@@ -182,7 +182,8 @@ func run(cfg config, log *slog.Logger) error {
 	st.SetHooks(store.Hooks{Positions: engine.Process, Connected: cmds.DeviceConnected})
 
 	geo, err := geocode.New(st, geocode.Options{Provider: cfg.Geocoder, URL: cfg.GeocoderURL,
-		Logger: log.With("component", "geocode")})
+		GoogleKey: func() string { return st.Settings().GoogleMapsKey },
+		Logger:    log.With("component", "geocode")})
 	if err != nil {
 		return err
 	}

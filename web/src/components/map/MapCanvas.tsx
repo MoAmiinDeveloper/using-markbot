@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import maplibregl, { type Map as MlMap } from 'maplibre-gl'
 import { DEFAULT_CENTER, DEFAULT_ZOOM } from '@/config'
-import { useResolvedMapStyle } from '@/store/ui'
+import { useResolvedMapStyle, useUi } from '@/store/ui'
 import { cn } from '@/lib/cn'
 import { loadBasemap } from './basemaps'
 import { ensureIcons } from './icons'
@@ -35,6 +35,7 @@ export function MapCanvas({
   const [styleVersion, setStyleVersion] = useState(0)
   const [degraded, setDegraded] = useState(false)
   const basemap = useResolvedMapStyle()
+  const googleKey = useUi((s) => s.googleMapsKey)
 
   // create once
   useEffect(() => {
@@ -78,7 +79,7 @@ export function MapCanvas({
   useEffect(() => {
     if (!map) return
     let cancelled = false
-    void loadBasemap(basemap).then(({ style, degraded }) => {
+    void loadBasemap(basemap, googleKey).then(({ style, degraded }) => {
       if (cancelled) return
       setDegraded(degraded)
       map.setStyle(style, { diff: false })
@@ -86,7 +87,7 @@ export function MapCanvas({
     return () => {
       cancelled = true
     }
-  }, [map, basemap])
+  }, [map, basemap, googleKey])
 
   return (
     <Ctx.Provider value={{ map, styleVersion }}>

@@ -22,6 +22,7 @@ type settingsView struct {
 	HarshScoring         bool     `json:"harshScoring"`
 	DriverAppTracking    bool     `json:"driverAppTracking"`
 	SMTP                 smtpView `json:"smtp"` // automation module
+	GoogleMapsKey        string   `json:"googleMapsKey"`
 }
 
 func viewSettings(cfg store.Settings, admin bool) settingsView {
@@ -35,6 +36,7 @@ func viewSettings(cfg store.Settings, admin bool) settingsView {
 		HarshScoring:         cfg.HarshScoring,
 		DriverAppTracking:    cfg.DriverAppTracking,
 		SMTP:                 viewSMTP(cfg.SMTP, admin),
+		GoogleMapsKey:        cfg.GoogleMapsKey,
 	}
 	if admin {
 		v.TraccarToken = cfg.TraccarToken
@@ -71,6 +73,7 @@ func (s *Server) handlePatchSettings(w http.ResponseWriter, r *http.Request) {
 		HarshScoring         *bool      `json:"harshScoring"`
 		DriverAppTracking    *bool      `json:"driverAppTracking"`
 		SMTP                 *smtpPatch `json:"smtp"` // automation module
+		GoogleMapsKey        *string    `json:"googleMapsKey"`
 	}
 	if err := decodeJSON(w, r, &req); err != nil {
 		s.fail(w, r, err)
@@ -130,6 +133,9 @@ func (s *Server) handlePatchSettings(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.SMTP != nil {
 			cfg.SMTP = smtpCfg
+		}
+		if req.GoogleMapsKey != nil {
+			cfg.GoogleMapsKey = strings.TrimSpace(*req.GoogleMapsKey)
 		}
 		return nil
 	})

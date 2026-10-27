@@ -47,7 +47,13 @@ type Options struct {
 	// Provider is "nominatim" (default) or "off" (places and coordinates only).
 	Provider string
 	// URL is the Nominatim base URL.
-	URL        string
+	URL string
+	// GoogleKey returns the current Google Maps API key; when it is non-empty
+	// the Google Geocoding API is used instead of Nominatim (even when
+	// Provider is "off").
+	GoogleKey func() string
+	// GoogleURL is the Geocoding API endpoint (overridable for tests).
+	GoogleURL  string
 	UserAgent  string
 	Interval   time.Duration
 	Timeout    time.Duration
@@ -88,6 +94,12 @@ func New(st Store, opts Options) (*Service, error) {
 	if opts.URL == "" {
 		opts.URL = DefaultURL
 	}
+	if opts.GoogleKey == nil {
+		opts.GoogleKey = func() string { return "" }
+	}
+	if opts.GoogleURL == "" {
+		opts.GoogleURL = DefaultGoogleURL
+	}
 	opts.URL = strings.TrimSuffix(opts.URL, "/")
 	if opts.UserAgent == "" {
 		opts.UserAgent = DefaultUserAgent
@@ -112,7 +124,50 @@ func New(st Store, opts Options) (*Service, error) {
 }
 
 // Enabled reports whether remote reverse geocoding is on.
-func (s *Service) Enabled() bool { return !s.off }
+func (s *Service) Enabled() bool { return !s.off || s.opts.GoogleKey() != "" }
+
+// DefaultGoogleURL is the Google Geocoding API endpoint.
+const DefaultGoogleURL = "https://maps.googleapis.com/maps/api/geocode/json"
+
+// googleReply is the subset of a Geocoding API reverse response we use.
+type googleReply struct {
+	Status       string `json:"status"`
+	ErrorMessage string `json:"error_message"`
+	Results      []struct {
+		FormattedAddress string `json:"formatted_address"`
+	} `json:"results"`
+}
+
+func (s *Service) reverseGoogle(ctx context.Context, key string, lat, lng float64) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, s.opts.Timeout)
+	defer cancel()
+	q := url.Values{"latlng": {strconv.FormatFloat(lat, 'f', 6, 64) + "," + strconv.FormatFloat(lng, 'f', 6, 64)},
+		"key": {key}, "language": {"en"}}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.opts.GoogleURL+"?"+q.Encode(), nil)
+	if err != nil {
+		return "", err
+	}
+	resp, err := s.opts.HTTPClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	var rep googleReply
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&rep); err != nil {
+		return "", fmt.Errorf("google geocoding: %w", err)
+	}
+	switch rep.Status {
+	case "OK":
+		if len(rep.Results) > 0 && rep.Results[0].FormattedAddress != "" {
+			return truncate(rep.Results[0].FormattedAddress, 200), nil
+		}
+		return "", errNotFound
+	case "ZERO_RESULTS":
+		return "", errNotFound
+	default:
+		return "", fmt.Errorf("google geocoding: %s %s", rep.Status, rep.ErrorMessage)
+	}
+}
 
 // Coords formats a coordinate fallback address.
 func Coords(lat, lng float64) string {
@@ -208,7 +263,7 @@ func (s *Service) Resolve(ctx context.Context, pts []Point) *Resolver {
 		cache = map[store.GeoKey]string{}
 	}
 	r.cache = cache
-	if !s.off {
+	if s.Enabled() {
 		for _, k := range keys {
 			if _, ok := cache[k]; !ok {
 				s.enqueue(k)
@@ -269,7 +324,7 @@ func (s *Service) Lookup(ctx context.Context, lat, lng float64) Result {
 		}
 		return Result{Address: a}
 	}
-	if s.off {
+	if !s.Enabled() {
 		return Result{Address: Coords(lat, lng)}
 	}
 	addr, err := s.lookupAndCache(ctx, k, lat, lng)
@@ -330,6 +385,12 @@ type nominatimReply struct {
 }
 
 func (s *Service) reverse(ctx context.Context, lat, lng float64) (string, error) {
+	if key := s.opts.GoogleKey(); key != "" {
+		return s.reverseGoogle(ctx, key, lat, lng)
+	}
+	if s.off {
+		return "", errNotFound
+	}
 	ctx, cancel := context.WithTimeout(ctx, s.opts.Timeout+s.opts.Interval*5)
 	defer cancel()
 	if err := s.wait(ctx); err != nil {

@@ -5,7 +5,9 @@ import { cn } from '@/lib/cn'
 import { useMapCtx } from './MapCanvas'
 
 const STYLES: Array<{ id: MapStyleId; label: string; swatch: string }> = [
-  { id: 'auto', label: 'Default (Streets)', swatch: 'linear-gradient(135deg,#e5e7eb 50%,#111827 50%)' },
+  { id: 'auto', label: 'Default', swatch: 'linear-gradient(135deg,#e5e7eb 50%,#111827 50%)' },
+  { id: 'google', label: 'Google Maps', swatch: 'linear-gradient(135deg,#f1f3f4,#aadaff 50%,#fbbc04)' },
+  { id: 'googleSatellite', label: 'Google Satellite', swatch: 'linear-gradient(135deg,#2d4a22,#5b6b3a 55%,#fbbc04)' },
   { id: 'streets', label: 'Streets', swatch: 'linear-gradient(135deg,#f8f4ec,#cfe3c4 55%,#f2c46c)' },
   { id: 'osm', label: 'OpenStreetMap', swatch: 'linear-gradient(135deg,#f2efe9,#aad3df 55%,#e8a07a)' },
   { id: 'light', label: 'Light', swatch: 'linear-gradient(135deg,#f3f4f6,#d1d5db)' },
@@ -48,7 +50,8 @@ export function ControlButton({
 /** Zoom buttons, basemap switcher and optional extra buttons, stacked on the right edge. */
 export function MapControls({ children, className }: { children?: ReactNode; className?: string }) {
   const { map } = useMapCtx()
-  const { mapStyle, setMapStyle } = useUi()
+  const { mapStyle, setMapStyle, googleMapsKey } = useUi()
+  const styles = STYLES.filter((s) => googleMapsKey || (s.id !== 'google' && s.id !== 'googleSatellite'))
   const [open, setOpen] = useState(false)
 
   return (
@@ -65,7 +68,7 @@ export function MapControls({ children, className }: { children?: ReactNode; cla
             className="glass absolute right-11 top-0 w-44 animate-fade-in rounded-xl p-1.5"
             onKeyDown={(e) => e.key === 'Escape' && setOpen(false)}
           >
-            {STYLES.map((s) => (
+            {styles.map((s) => (
               <button
                 key={s.id}
                 role="menuitemradio"

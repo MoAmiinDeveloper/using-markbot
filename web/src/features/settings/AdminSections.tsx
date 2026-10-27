@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Bot, CircleCheck, Coins, Eye, EyeOff, Gauge, KeyRound, Mail, RefreshCw, Send, ShieldCheck, Smartphone, Waypoints } from 'lucide-react'
+import { Bot, CircleCheck, Coins, Map as MapIcon, Eye, EyeOff, Gauge, KeyRound, Mail, RefreshCw, Send, ShieldCheck, Smartphone, Waypoints } from 'lucide-react'
 import { Segmented } from '@/components/ui/Tabs'
 import { api, ApiError, qk } from '@/api/client'
 import type { Settings, SettingsPatch, SmtpTls } from '@/api/types'
@@ -528,6 +528,55 @@ export function DriverAppSection({ settings }: { settings: Settings }) {
           <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" /> Tell drivers when their phone is tracked. Tracking only runs while they are signed in to the app.
         </p>
       </div>
+    </SettingsCard>
+  )
+}
+
+export function GoogleMapsSection({ settings }: { settings: Settings }) {
+  const save = useSaveSettings('Google Maps key saved')
+  const [key, setKey] = useState(settings.googleMapsKey ?? '')
+  const [show, setShow] = useState(false)
+  useEffect(() => setKey(settings.googleMapsKey ?? ''), [settings.googleMapsKey])
+  const dirty = key.trim() !== (settings.googleMapsKey ?? '')
+  const submit = (e: FormEvent) => {
+    e.preventDefault()
+    save.mutate({ googleMapsKey: key.trim() })
+  }
+  return (
+    <SettingsCard
+      id="google-maps"
+      icon={<MapIcon />}
+      title="Google Maps"
+      badge={<AdminBadge />}
+      description="Use Google's maps and street addresses instead of OpenStreetMap. Leave empty to use the free OpenStreetMap maps."
+    >
+      <form onSubmit={submit} className="space-y-3">
+        <Field label="API key" hint={settings.googleMapsKey ? 'Configured — Google Maps and Google Satellite appear in the map style menu' : 'Not configured'}>
+          {(id, d) => (
+            <div className="flex gap-2">
+              <Input id={id} aria-describedby={d} type={show ? 'text' : 'password'} value={key} onChange={(e) => setKey(e.target.value)} placeholder="AIza…" autoComplete="off" spellCheck={false} className="font-mono" />
+              <Button type="button" variant="secondary" onClick={() => setShow((x) => !x)} aria-label={show ? 'Hide key' : 'Show key'} icon={show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />} />
+            </div>
+          )}
+        </Field>
+        <Steps>
+          {[
+            <>In Google Cloud Console → APIs &amp; Services, enable <b>Map Tiles API</b> (maps) and <b>Geocoding API</b> (addresses).</>,
+            <>Restrict the key: <b>Application restrictions → Websites</b> with your Somtel Fleet address, and <b>API restrictions</b> to those two APIs.</>,
+            <>Paste the key here and save. <b>Google Maps</b> becomes the default map and appears in the map style menu.</>,
+          ]}
+        </Steps>
+        <div className="flex justify-end gap-2">
+          {settings.googleMapsKey && (
+            <Button type="button" variant="ghost" disabled={save.isPending} onClick={() => save.mutate({ googleMapsKey: '' })}>
+              Remove key
+            </Button>
+          )}
+          <Button type="submit" variant="primary" loading={save.isPending} disabled={!dirty}>
+            Save
+          </Button>
+        </div>
+      </form>
     </SettingsCard>
   )
 }

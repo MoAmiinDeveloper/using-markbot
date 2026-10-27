@@ -155,3 +155,31 @@ func TestShortAddress(t *testing.T) {
 		t.Fatal(a)
 	}
 }
+
+func TestGoogleReverse(t *testing.T) {
+	var gotKey, gotLatLng string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotKey, gotLatLng = r.URL.Query().Get("key"), r.URL.Query().Get("latlng")
+		_, _ = w.Write([]byte(`{"status":"OK","results":[{"formatted_address":"Road No. 1, Hargeisa, Somaliland"}]}`))
+	}))
+	defer srv.Close()
+	key := "test-key"
+	s, err := New(nil, Options{Provider: "off", GoogleURL: srv.URL, GoogleKey: func() string { return key }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !s.Enabled() {
+		t.Fatal("google key should enable geocoding even with provider off")
+	}
+	addr, err := s.reverse(context.Background(), 9.5624, 44.0770)
+	if err != nil || addr != "Road No. 1, Hargeisa, Somaliland" {
+		t.Fatalf("addr=%q err=%v", addr, err)
+	}
+	if gotKey != "test-key" || gotLatLng != "9.562400,44.077000" {
+		t.Fatalf("request key=%q latlng=%q", gotKey, gotLatLng)
+	}
+	key = ""
+	if s.Enabled() {
+		t.Fatal("provider off without key must be disabled")
+	}
+}

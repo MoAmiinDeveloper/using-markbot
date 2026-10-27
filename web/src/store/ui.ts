@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { readLS, writeLS } from '@/lib/storage'
 
 export type Theme = 'dark' | 'light'
-export type MapStyleId = 'auto' | 'streets' | 'osm' | 'light' | 'dark' | 'satellite'
+export type MapStyleId = 'auto' | 'google' | 'googleSatellite' | 'streets' | 'osm' | 'light' | 'dark' | 'satellite'
 
 function applyTheme(theme: Theme) {
   const root = document.documentElement
@@ -15,6 +15,9 @@ function applyTheme(theme: Theme) {
 interface UiState {
   theme: Theme
   mapStyle: MapStyleId
+  /** Google Maps key from server settings ('' when not configured) */
+  googleMapsKey: string
+  setGoogleMapsKey: (k: string) => void
   /** geofence overlay on the Live Map */
   showGeofences: boolean
   /** places (POI) overlay on the Live Map */
@@ -31,13 +34,15 @@ interface UiState {
 const initialTheme: Theme = readLS('fleet.theme') === 'light' ? 'light' : 'dark'
 const storedStyle = readLS('fleet.mapStyle')
 const initialStyle: MapStyleId =
-  storedStyle === 'streets' || storedStyle === 'osm' || storedStyle === 'light' || storedStyle === 'dark' || storedStyle === 'satellite'
+  storedStyle === 'google' || storedStyle === 'googleSatellite' || storedStyle === 'streets' || storedStyle === 'osm' || storedStyle === 'light' || storedStyle === 'dark' || storedStyle === 'satellite'
     ? storedStyle
     : 'auto'
 
 export const useUi = create<UiState>((set, get) => ({
   theme: initialTheme,
   mapStyle: initialStyle,
+  googleMapsKey: '',
+  setGoogleMapsKey: (googleMapsKey) => set({ googleMapsKey }),
   showGeofences: readLS('fleet.showGeofences') !== '0',
   showPlaces: readLS('fleet.showPlaces') === '1',
   showRoutes: readLS('fleet.showRoutes') === '1',
@@ -70,9 +75,11 @@ export const useUi = create<UiState>((set, get) => ({
 
 /** Resolve 'auto' to the theme's matching basemap. */
 export function useResolvedMapStyle(): Exclude<MapStyleId, 'auto'> {
-  const { mapStyle } = useUi()
-  // Default to the OpenStreetMap-based street map in both themes: it carries far more
-  // local place and street names (e.g. across Somalia/Somaliland) than the minimal
-  // light/dark styles, which stay available in the map style menu.
-  return mapStyle === 'auto' ? 'streets' : mapStyle
+  const { mapStyle, googleMapsKey } = useUi()
+  // Default: Google roadmap when a key is configured, else the OpenStreetMap-based
+  // street map. Both carry far more local place and street names (e.g. across
+  // Somalia/Somaliland) than the minimal light/dark styles.
+  if (mapStyle === 'auto') return googleMapsKey ? 'google' : 'streets'
+  if ((mapStyle === 'google' || mapStyle === 'googleSatellite') && !googleMapsKey) return 'streets'
+  return mapStyle
 }

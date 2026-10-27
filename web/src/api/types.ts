@@ -284,6 +284,8 @@ export interface Settings {
   /** Phase 4a */
   driverAppTracking?: boolean
   smtp?: SmtpSettings
+  /** Google Maps browser key: Google basemaps + server reverse geocoding ("" = off) */
+  googleMapsKey?: string
 }
 
 export type SmtpTls = 'starttls' | 'tls' | 'none'
@@ -299,7 +301,7 @@ export interface SmtpSettings {
 }
 
 export type SettingsPatch = Partial<
-  Pick<Settings, 'speedLimit' | 'overspeedMinDuration' | 'telegramBotToken' | 'currency' | 'idleAlertMinutes' | 'harshScoring' | 'driverAppTracking'>
+  Pick<Settings, 'speedLimit' | 'overspeedMinDuration' | 'telegramBotToken' | 'currency' | 'idleAlertMinutes' | 'harshScoring' | 'driverAppTracking' | 'googleMapsKey'>
 > & { smtp?: Partial<Omit<SmtpSettings, 'configured'>> }
 
 export interface ChannelPrefs {

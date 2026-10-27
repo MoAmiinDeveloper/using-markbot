@@ -38,6 +38,11 @@ type Settings struct {
 
 	// Phase 4a (automation module): outgoing email.
 	SMTP SMTPSettings `json:"smtp"`
+
+	// GoogleMapsKey enables Google basemaps in the browser and Google reverse
+	// geocoding on the server. It is a browser key, so every user can read it;
+	// restrict it by HTTP referrer in the Google Cloud console.
+	GoogleMapsKey string `json:"googleMapsKey"`
 }
 
 // SMTP TLS modes.

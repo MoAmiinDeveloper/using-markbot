@@ -1,13 +1,13 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Bell, Bot, Coins, Gauge, LogOut, Mail, Moon, Smartphone, Sun, UserRound, Waypoints, type LucideIcon } from 'lucide-react'
+import { Bell, Bot, Coins, Gauge, LogOut, Mail, Moon, Smartphone, Sun, UserRound, Waypoints, type LucideIcon, Map as MapIcon } from 'lucide-react'
 import { api, qk } from '@/api/client'
 import { useAuth } from '@/store/auth'
 import { useUi } from '@/store/ui'
 import { Button } from '@/components/ui/Button'
 import { Skeleton } from '@/components/ui/Misc'
 import { NotificationsSection } from '@/features/settings/Notifications'
-import { AlertRulesSection, DriverAppSection, EmailSection, OperationsSection, TelegramBotSection, TraccarSection } from '@/features/settings/AdminSections'
+import { AlertRulesSection, DriverAppSection, GoogleMapsSection, EmailSection, OperationsSection, TelegramBotSection, TraccarSection } from '@/features/settings/AdminSections'
 import { ProfileForm } from '@/features/settings/Profile'
 import { RoleBadge } from '@/components/ui/Badges'
 import { SettingsCard } from '@/features/settings/ui'
@@ -84,6 +84,7 @@ const SECTIONS: Array<{ id: string; label: string; icon: LucideIcon; admin?: boo
   { id: 'telegram', label: 'Telegram bot', icon: Bot, admin: true },
   { id: 'email', label: 'Email (SMTP)', icon: Mail, admin: true },
   { id: 'driver-app', label: 'Driver app', icon: Smartphone, admin: true },
+  { id: 'google-maps', label: 'Google Maps', icon: MapIcon, admin: true },
   { id: 'traccar', label: 'Traccar bridge', icon: Waypoints, admin: true },
   { id: 'account', label: 'Account', icon: UserRound },
 ]
@@ -163,6 +164,7 @@ export default function SettingsPage() {
                 {adminBody((x) => <TelegramBotSection settings={x} />, 'telegram')}
                 {adminBody((x) => <EmailSection settings={x} />, 'email')}
                 {adminBody((x) => <DriverAppSection settings={x} />, 'driver-app')}
+                {adminBody((x) => <GoogleMapsSection settings={x} />, 'google-maps')}
                 {adminBody((x) => <TraccarSection settings={x} />, 'traccar')}
                 {settings.isError && (
                   <p className="card px-4 py-3 text-[12.5px] text-slate-500">Workspace settings are unavailable on this server.</p>
