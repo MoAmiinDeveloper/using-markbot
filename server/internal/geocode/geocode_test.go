@@ -183,3 +183,23 @@ func TestGoogleReverse(t *testing.T) {
 		t.Fatal("provider off without key must be disabled")
 	}
 }
+
+func TestGoogleDeniedFallsBackToOSM(t *testing.T) {
+	gsrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"status":"REQUEST_DENIED","error_message":"API not enabled"}`))
+	}))
+	defer gsrv.Close()
+	osm := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"display_name":"Independence Avenue, Hargeisa","address":{"road":"Independence Avenue","city":"Hargeisa"}}`))
+	}))
+	defer osm.Close()
+	s, err := New(nil, Options{URL: osm.URL, Interval: time.Millisecond, GoogleURL: gsrv.URL,
+		GoogleKey: func() string { return "demo" }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr, err := s.reverse(context.Background(), 9.56, 44.07)
+	if err != nil || addr == "" {
+		t.Fatalf("addr=%q err=%v", addr, err)
+	}
+}

@@ -386,7 +386,12 @@ type nominatimReply struct {
 
 func (s *Service) reverse(ctx context.Context, lat, lng float64) (string, error) {
 	if key := s.opts.GoogleKey(); key != "" {
-		return s.reverseGoogle(ctx, key, lat, lng)
+		addr, err := s.reverseGoogle(ctx, key, lat, lng)
+		// A refused key or used-up quota falls back to OpenStreetMap.
+		if err == nil || errors.Is(err, errNotFound) || s.off {
+			return addr, err
+		}
+		s.log.Warn("google geocoding failed, using OpenStreetMap", "err", err)
 	}
 	if s.off {
 		return "", errNotFound
