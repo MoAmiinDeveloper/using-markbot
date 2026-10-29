@@ -15,6 +15,7 @@ const ReportsPage = lazy(() => import('./pages/Reports'))
 const DriversPage = lazy(() => import('./pages/Drivers'))
 const MaintenancePage = lazy(() => import('./pages/Maintenance'))
 const ParametersPage = lazy(() => import('./pages/Parameters'))
+const DataWindowPage = lazy(() => import('./pages/DataWindow'))
 const AdminPage = lazy(() => import('./pages/Admin'))
 const SharePage = lazy(() => import('./pages/Share'))
 const DispatchPage = lazy(() => import('./pages/Dispatch'))
@@ -91,6 +92,7 @@ export function App() {
           <Route path="/dispatch" element={lazyEl(<DispatchPage />)} />
           <Route path="/maintenance" element={lazyEl(<MaintenancePage />)} />
           <Route path="/parameters" element={lazyEl(<ParametersPage />)} />
+          <Route path="/data" element={lazyEl(<DataWindowPage />)} />
           <Route path="/admin" element={lazyEl(<AdminPage />)} />
           <Route path="*" element={<Navigate to="/live" replace />} />
         </Route>

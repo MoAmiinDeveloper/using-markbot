@@ -326,9 +326,14 @@ export function DeviceDetail({
               {rawOpen && (
                 <div className="animate-fade-in border-t border-slate-200/80 p-2 dark:border-white/[0.06]">
                   <ParamsTable device={device} compact />
-                  <button type="button" onClick={() => nav(`/parameters?device=${device.id}`)} className="mt-2 w-full text-center text-[12px] font-medium text-navy-700 hover:underline dark:text-brand-300">
-                    Open full table, formulas & custom events
-                  </button>
+                  <div className="mt-2 flex justify-center gap-4 text-[12px] font-medium text-navy-700 dark:text-brand-300">
+                    <button type="button" onClick={() => nav(`/data?device=${device.id}`)} className="hover:underline">
+                      Data window (all records)
+                    </button>
+                    <button type="button" onClick={() => nav(`/parameters?device=${device.id}`)} className="hover:underline">
+                      Names & formulas
+                    </button>
+                  </div>
                 </div>
               )}
             </div>

@@ -21,7 +21,8 @@ import { useDrivers, useGroups } from '@/features/common/queries'
 import { DeviceEditor, type EditorTab } from '@/features/devices/DeviceEditor'
 import { GroupChip } from '@/components/ui/Badges'
 import { fmtHours, fmtKm } from '@/lib/format'
-import { Gauge as GaugeIcon, SlidersHorizontal, Timer, UserRound } from 'lucide-react'
+import { Eraser, FlaskConical, Gauge as GaugeIcon, SlidersHorizontal, Timer, UserRound } from 'lucide-react'
+import { CleanupDialog, isTestDevice } from '@/features/devices/CleanupDialog'
 
 type SortKey = 'name' | 'status' | 'lastSeen' | 'imei' | 'category'
 const STATUS_ORDER: Record<DeviceStatus, number> = { moving: 0, idle: 1, stopped: 2, offline: 3, never: 4 }
@@ -78,6 +79,8 @@ export default function DevicesPage() {
     }
   }
   const [deleting, setDeleting] = useState<Device | null>(null)
+  const [cleanup, setCleanup] = useState(false)
+  const testCount = devices.filter(isTestDevice).length
 
   const del = useMutation({
     mutationFn: (d: Device) => api.deleteDevice(d.id),
@@ -134,12 +137,30 @@ export default function DevicesPage() {
             </p>
           </div>
           {isAdmin && (
-            <Button variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setEditing('new')}>
-              Add device
-            </Button>
+            <div className="flex gap-2">
+              {devices.length > 0 && (
+                <Button icon={<Eraser className="h-4 w-4" />} onClick={() => setCleanup(true)}>
+                  Clean up
+                </Button>
+              )}
+              <Button variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setEditing('new')}>
+                Add device
+              </Button>
+            </div>
           )}
         </div>
 
+        {isAdmin && testCount > 0 && (
+          <div className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-[13px] text-amber-900 dark:text-amber-100">
+            <FlaskConical className="h-4 w-4 shrink-0" />
+            <span className="flex-1">
+              <b>{testCount} test device{testCount === 1 ? '' : 's'}</b> from the simulator or phone tracker {testCount === 1 ? 'is' : 'are'} registered. Remove {testCount === 1 ? 'it' : 'them'} to work with real trackers only.
+            </span>
+            <Button size="sm" onClick={() => setCleanup(true)}>
+              Review & remove
+            </Button>
+          </div>
+        )}
         <div className="card overflow-hidden">
           <div className="flex flex-col gap-2 border-b border-slate-200/80 p-3 dark:border-white/[0.06] sm:flex-row sm:items-center">
             <Input
@@ -366,6 +387,7 @@ export default function DevicesPage() {
         />
       )}
 
+      {cleanup && <CleanupDialog devices={devices} onClose={() => setCleanup(false)} />}
       <Modal
         open={!!deleting}
         onClose={() => !del.isPending && setDeleting(null)}

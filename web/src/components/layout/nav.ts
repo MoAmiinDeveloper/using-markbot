@@ -17,6 +17,7 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
+  TableProperties,
   Wrench,
   type LucideIcon,
 } from 'lucide-react'
@@ -49,6 +50,7 @@ export const NAV: NavItem[] = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, section: 'monitor', primary: true, keywords: 'overview kpi charts utilisation', description: 'Fleet KPIs and trends' },
   { to: '/alerts', label: 'Alerts', icon: BellRing, section: 'monitor', primary: true, keywords: 'events notifications alarms', description: 'Every event, filterable' },
   { to: '/history', label: 'History', icon: History, section: 'monitor', keywords: 'playback route replay trips', description: 'Replay routes and trips' },
+  { to: '/data', label: 'Data window', icon: TableProperties, section: 'monitor', keywords: 'raw data records io parameters packets log tracker avl', description: 'Every record a tracker sends, all parameters' },
   { to: '/reports', label: 'Reports', icon: ChartColumn, section: 'analyse', primary: true, keywords: 'export excel pdf csv', description: 'Activity, alert, driver and fleet reports' },
   { to: '/dispatch', label: 'Dispatch', icon: ClipboardList, section: 'manage', keywords: 'jobs deliveries orders tasks pod proof signature stops driver app', description: 'Jobs, stops and proof of delivery' },
   { to: '/geofences', label: 'Geofences', icon: Hexagon, section: 'manage', keywords: 'zones places poi routes corridor', description: 'Zones, places and planned routes' },
