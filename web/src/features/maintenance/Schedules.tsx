@@ -105,7 +105,7 @@ function ScheduleCard({
         <div className="min-w-0 flex-1">
           <h3 className="truncate text-[14px] font-semibold text-slate-900 dark:text-white">{m.name}</h3>
           <p className="mt-0.5 flex items-center gap-1.5 truncate text-[12px] text-slate-500 dark:text-slate-400">
-            {dev && <CategoryIcon category={dev.category} className="h-3.5 w-3.5 shrink-0" />}
+            {dev && <CategoryIcon category={dev.category} icon={dev.icon} className="h-3.5 w-3.5 shrink-0" />}
             <span className="truncate">{dev?.name ?? `Vehicle #${m.deviceId}`}</span>
             {dev?.plate && <span className="shrink-0 text-slate-400">· {dev.plate}</span>}
           </p>

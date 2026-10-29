@@ -119,7 +119,7 @@ function VehicleRow({ d, right, now }: { d: Device; right: ReactNode; now: numbe
         className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition-colors hover:bg-slate-900/[0.035] dark:hover:bg-white/[0.04]"
       >
         <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg" style={{ background: `${m.color}1a`, color: m.color }}>
-          <CategoryIcon category={d.category} className="h-4 w-4" />
+          <CategoryIcon category={d.category} icon={d.icon} className="h-4 w-4" />
         </span>
         <span className="min-w-0 flex-1">
           <span className="block truncate font-medium text-slate-900 dark:text-white">{d.name}</span>

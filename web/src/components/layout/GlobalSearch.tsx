@@ -65,7 +65,7 @@ export function GlobalSearch({ className }: { className?: string }) {
         to: `/live?device=${d.id}`,
         title: d.name,
         subtitle: d.plate || d.imei,
-        icon: <CategoryIcon category={d.category} className="h-4 w-4" />,
+        icon: <CategoryIcon category={d.category} icon={d.icon} className="h-4 w-4" />,
         right: <StatusPill status={d.status} />,
       }))
     return [...vehicles, ...reports, ...screens]

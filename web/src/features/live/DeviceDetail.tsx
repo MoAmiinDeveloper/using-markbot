@@ -38,6 +38,7 @@ import { cn } from '@/lib/cn'
 import { SignalBars, SpeedGauge } from './SpeedGauge'
 import { SourceBadge } from '@/components/ui/SourceBadge'
 import { CommandsSection } from './Commands'
+import { ParamsTable } from '@/features/params/ParamsTable'
 import { RecentAlerts } from './RecentAlerts'
 
 function Metric({ icon, label, value, accent }: { icon: ReactNode; label: string; value: ReactNode; accent?: string }) {
@@ -68,14 +69,6 @@ function CopyButton({ text, label }: { text: string; label: string }) {
       {done ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
     </IconButton>
   )
-}
-
-function fmtAttr(v: unknown): string {
-  if (v === null || v === undefined) return '—'
-  if (typeof v === 'boolean') return v ? 'true' : 'false'
-  if (typeof v === 'number') return Number.isInteger(v) ? String(v) : v.toFixed(3)
-  if (typeof v === 'object') return JSON.stringify(v)
-  return String(v)
 }
 
 export function DeviceDetail({
@@ -117,7 +110,7 @@ export function DeviceDetail({
       {/* header */}
       <div className="flex items-start gap-3 px-4 pb-3 pt-3 md:pt-4">
         <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl" style={{ background: `${m.color}1f`, color: m.color }}>
-          <CategoryIcon category={device.category} className="h-5 w-5" />
+          <CategoryIcon category={device.category} icon={device.icon} className="h-5 w-5" />
         </span>
         <div className="min-w-0 flex-1">
           <h2 className="truncate text-[16px] font-semibold tracking-tight text-slate-900 dark:text-white">{device.name}</h2>
@@ -293,6 +286,27 @@ export function DeviceDetail({
                     <dd className="tabular text-right text-slate-900 dark:text-white">{device.phone}</dd>
                   </>
                 )}
+                {device.details?.owner.name && (
+                  <>
+                    <dt className="text-slate-500 dark:text-slate-400">Owner</dt>
+                    <dd className="truncate text-right text-slate-900 dark:text-white">
+                      {device.details.owner.name}
+                      {device.details.owner.phone && (
+                        <a href={`tel:${device.details.owner.phone.replace(/\s/g, '')}`} className="ml-1.5 text-navy-700 hover:underline dark:text-brand-300">
+                          {device.details.owner.phone}
+                        </a>
+                      )}
+                    </dd>
+                  </>
+                )}
+                {(device.details?.vehicle.make || device.details?.vehicle.model) && (
+                  <>
+                    <dt className="text-slate-500 dark:text-slate-400">Vehicle</dt>
+                    <dd className="truncate text-right text-slate-900 dark:text-white">
+                      {[device.details.vehicle.make, device.details.vehicle.model, device.details.vehicle.year || ''].filter(Boolean).join(' ')}
+                    </dd>
+                  </>
+                )}
               </dl>
             </div>
 
@@ -306,24 +320,16 @@ export function DeviceDetail({
                 aria-expanded={rawOpen}
                 className="flex w-full items-center justify-between bg-white/60 px-3 py-2.5 text-[12.5px] font-medium text-slate-700 hover:bg-slate-50 dark:bg-white/[0.025] dark:text-slate-300 dark:hover:bg-white/[0.05]"
               >
-                All attributes <span className="ml-1 text-slate-400">({attrs.length})</span>
+                All parameters <span className="ml-1 text-slate-400">({attrs.length + 7})</span>
                 <ChevronDown className={cn('ml-auto h-4 w-4 text-slate-400 transition-transform', rawOpen && 'rotate-180')} />
               </button>
               {rawOpen && (
-                <dl className="grid animate-fade-in grid-cols-2 gap-x-3 gap-y-1 border-t border-slate-200/80 px-3 py-2.5 font-mono text-[11.5px] dark:border-white/[0.06]">
-                  {attrs.map(([k, v]) => (
-                    <div key={k} className="contents">
-                      <dt className="truncate text-slate-500 dark:text-slate-400">{k}</dt>
-                      <dd className="truncate text-right text-slate-900 dark:text-slate-100">{fmtAttr(v)}</dd>
-                    </div>
-                  ))}
-                  {(['priority', 'eventId', 'serverTime'] as const).map((k) => (
-                    <div key={k} className="contents">
-                      <dt className="truncate text-slate-400 dark:text-slate-500">{k}</dt>
-                      <dd className="truncate text-right text-slate-500 dark:text-slate-400">{String(p[k])}</dd>
-                    </div>
-                  ))}
-                </dl>
+                <div className="animate-fade-in border-t border-slate-200/80 p-2 dark:border-white/[0.06]">
+                  <ParamsTable device={device} compact />
+                  <button type="button" onClick={() => nav(`/parameters?device=${device.id}`)} className="mt-2 w-full text-center text-[12px] font-medium text-navy-700 hover:underline dark:text-brand-300">
+                    Open full table, formulas & custom events
+                  </button>
+                </div>
               )}
             </div>
           </>

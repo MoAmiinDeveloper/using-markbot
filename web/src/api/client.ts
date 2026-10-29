@@ -57,6 +57,11 @@ import type {
   ScheduleRun,
   Sensor,
   SensorInput,
+  ParamDef,
+  ParamInput,
+  ParamTestResult,
+  CustomEvent,
+  CustomEventInput,
 } from './types'
 
 export class ApiError extends Error {
@@ -274,6 +279,17 @@ export const api = {
   createSensor: (input: SensorInput) => request<Sensor>('POST', '/sensors', input),
   updateSensor: (id: number, input: Partial<SensorInput>) => request<Sensor>('PATCH', `/sensors/${id}`, input),
   deleteSensor: (id: number) => request<void>('DELETE', `/sensors/${id}`),
+
+  // data parameters & custom events
+  params: (deviceId?: number) => request<ParamDef[]>('GET', '/params', undefined, { deviceId }),
+  createParam: (input: ParamInput) => request<ParamDef>('POST', '/params', input),
+  updateParam: (id: number, input: ParamInput) => request<ParamDef>('PUT', `/params/${id}`, input),
+  deleteParam: (id: number) => request<void>('DELETE', `/params/${id}`),
+  testExpression: (expression: string, deviceId?: number) => request<ParamTestResult>('POST', '/params/test', { expression, deviceId: deviceId ?? 0 }),
+  customEvents: () => request<CustomEvent[]>('GET', '/custom-events'),
+  createCustomEvent: (input: CustomEventInput) => request<CustomEvent>('POST', '/custom-events', input),
+  updateCustomEvent: (id: number, input: CustomEventInput) => request<CustomEvent>('PUT', `/custom-events/${id}`, input),
+  deleteCustomEvent: (id: number) => request<void>('DELETE', `/custom-events/${id}`),
 }
 
 /** Multipart upload (no JSON content-type: the browser sets the boundary). */
@@ -398,6 +414,8 @@ export const qk = {
   reportSchedules: ['reportSchedules'] as const,
   scheduleRuns: (id: number) => ['scheduleRuns', id] as const,
   sensors: (deviceId?: number) => (deviceId != null ? (['sensors', deviceId] as const) : (['sensors'] as const)),
+  params: ['params'] as const,
+  customEvents: ['customEvents'] as const,
 }
 
 export function wsUrl(token: string): string {

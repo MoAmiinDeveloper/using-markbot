@@ -31,5 +31,6 @@
 | 2 – Fleet operations ✅ | Geofences + enter/exit, alerts (overspeed, ignition, SOS, power cut, towing), in-app + Telegram + browser push, Codec 12 commands (engine block, reboot), Traccar bridge |
 | 3 – Trakzee-style operations ✅ | Reports centre (13 reports, CSV/Excel/PDF), dashboard analytics, drivers + behaviour scoring (harsh events), maintenance schedules, document reminders, expenses, roles (admin/manager/viewer) + vehicle groups, places (POIs) + street addresses, live-location share links |
 | 4a – Operations ✅ | Jobs/dispatch with stops, checklists, photos & signatures; native Android driver app (Somtel Driver); routes with deviation alerts; scheduled reports by Telegram & email; fuel & temperature sensors with calibration, drain/refuel detection |
+| 4a+ – Data & registration ✅ | Live parameters table with names, calculated (virtual) parameters from formulas, custom events, full device registration (map icon, vehicle, SIM, owner, driver, sensors) |
 | 4b – Business & scale | Companies/resellers + white-label (logo, colours, domain), billing & licence renewals, TimescaleDB, multi-node |
 | 5 – More devices & mobile | Concox/GT06, Queclink, Ruptela, Meitrack…, mobile app/PWA, video telematics |

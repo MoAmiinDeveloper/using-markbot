@@ -1,286 +1,30 @@
-import { lazy, Suspense, useMemo, useState, type FormEvent } from 'react'
-import { Tabs } from '@/components/ui/Tabs'
-const SensorsPanel = lazy(() => import('@/features/sensors/SensorsPanel'))
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation } from '@tanstack/react-query'
 import { ArrowDown, ArrowUp, ArrowUpDown, Cpu, History, Map, Pencil, Plus, Search, SearchX, Trash2 } from 'lucide-react'
-import { api, ApiError, qk } from '@/api/client'
-import { DEVICE_CATEGORIES, PROTOCOLS, type Device, type DeviceInput, type DeviceStatus } from '@/api/types'
+import { api } from '@/api/client'
+import type { Device, DeviceStatus } from '@/api/types'
 import { Button, IconButton } from '@/components/ui/Button'
-import { Field, Input, Select } from '@/components/ui/Input'
-import { Drawer, Modal } from '@/components/ui/Modal'
+import { Input, Select } from '@/components/ui/Input'
+import { Modal } from '@/components/ui/Modal'
 import { EmptyState, Skeleton, StatusPill } from '@/components/ui/Misc'
 import { useDeviceList, useLive } from '@/store/live'
 import { SourceBadge } from '@/components/ui/SourceBadge'
 import { useNow } from '@/store/now'
 import { toast } from '@/store/toast'
-import { CategoryIcon, categoryMeta } from '@/lib/category'
+import { categoryMeta, DeviceGlyph } from '@/lib/category'
 import { STATUS_META, STATUSES } from '@/lib/status'
 import { timeAgo } from '@/lib/format'
 import { cn } from '@/lib/cn'
 import { useAccess } from '@/lib/access'
 import { useDrivers, useGroups } from '@/features/common/queries'
+import { DeviceEditor, type EditorTab } from '@/features/devices/DeviceEditor'
 import { GroupChip } from '@/components/ui/Badges'
 import { fmtHours, fmtKm } from '@/lib/format'
-import { Gauge as GaugeIcon, Timer, UserRound } from 'lucide-react'
+import { Gauge as GaugeIcon, SlidersHorizontal, Timer, UserRound } from 'lucide-react'
 
 type SortKey = 'name' | 'status' | 'lastSeen' | 'imei' | 'category'
 const STATUS_ORDER: Record<DeviceStatus, number> = { moving: 0, idle: 1, stopped: 2, offline: 3, never: 4 }
-
-type FormValues = Omit<DeviceInput, 'speedLimit' | 'odometer' | 'engineHours'> & { speedLimit: string; odometer: string; engineHours: string }
-
-const EMPTY: FormValues = { name: '', imei: '', protocol: 'teltonika', plate: '', model: '', category: 'car', phone: '', speedLimit: '', odometer: '', engineHours: '' }
-
-function validate(v: FormValues, bridged: boolean) {
-  const e: Partial<Record<keyof FormValues, string>> = {}
-  if (!v.name.trim()) e.name = 'Name is required'
-  else if (v.name.trim().length > 64) e.name = 'Keep it under 64 characters'
-  if (bridged) {
-    if (!v.imei.trim()) e.imei = 'Identifier is required'
-  } else if (!/^\d{15}$/.test(v.imei.trim())) e.imei = 'IMEI must be exactly 15 digits'
-  if (v.speedLimit.trim() && !/^\d{1,3}$/.test(v.speedLimit.trim())) e.speedLimit = 'Enter a whole number of km/h'
-  else if (Number(v.speedLimit) > 300) e.speedLimit = 'That’s faster than 300 km/h'
-  if (v.phone && !/^\+?[\d\s-]{5,20}$/.test(v.phone.trim())) e.phone = 'Enter a valid phone number'
-  if (v.odometer && !/^\d{1,8}(\.\d*)?$/.test(v.odometer)) e.odometer = 'Kilometres, e.g. 81234'
-  if (v.engineHours && !/^\d{1,6}(\.\d*)?$/.test(v.engineHours)) e.engineHours = 'Hours, e.g. 812.5'
-  return e
-}
-
-function DeviceForm({ initial, onClose, startTab = 'details' }: { initial: Device | null; onClose: () => void; startTab?: 'details' | 'sensors' }) {
-  const bridged = initial?.source === 'traccar'
-  const [tab, setTab] = useState<'details' | 'sensors'>(initial ? startTab : 'details')
-  const { canManage } = useAccess()
-  const [v, setV] = useState<FormValues>(() =>
-    initial
-      ? {
-          name: initial.name,
-          imei: initial.imei,
-          protocol: initial.protocol || 'teltonika',
-          plate: initial.plate,
-          model: initial.model,
-          category: initial.category || 'other',
-          phone: initial.phone,
-          speedLimit: initial.speedLimit ? String(initial.speedLimit) : '',
-          odometer: initial.odometer != null ? String(Math.round(initial.odometer)) : '',
-          engineHours: initial.engineHours != null ? String(Math.round(initial.engineHours * 10) / 10) : '',
-        }
-      : EMPTY,
-  )
-  const [touched, setTouched] = useState(false)
-  const [serverError, setServerError] = useState<string | null>(null)
-  const errors = validate(v, bridged)
-  const show = (k: keyof FormValues) => (touched ? errors[k] : undefined)
-  const upsert = useLive((s) => s.upsert)
-  const settings = useQuery({ queryKey: qk.settings, queryFn: api.settings, staleTime: 60_000, meta: { silent: true } })
-  const defaultLimit = settings.data?.speedLimit
-
-  const m = useMutation({
-    mutationFn: (input: FormValues) => {
-      const { odometer, engineHours, ...rest } = input
-      const clean: DeviceInput = {
-        ...rest,
-        speedLimit: input.speedLimit.trim() ? Number(input.speedLimit) : 0,
-        name: input.name.trim(),
-        imei: input.imei.trim(),
-        plate: input.plate?.trim(),
-        model: input.model?.trim(),
-        phone: input.phone?.trim(),
-      }
-      // only send counters when they were changed (calibration)
-      if (initial && odometer !== '' && Number(odometer) !== Math.round(initial.odometer ?? -1)) clean.odometer = Number(odometer)
-      if (initial && engineHours !== '' && Number(engineHours) !== Math.round((initial.engineHours ?? -1) * 10) / 10) clean.engineHours = Number(engineHours)
-      if (!initial && odometer !== '') clean.odometer = Number(odometer)
-      if (!initial && engineHours !== '') clean.engineHours = Number(engineHours)
-      return initial ? api.updateDevice(initial.id, clean) : api.createDevice(clean)
-    },
-    onSuccess: (d) => {
-      upsert(d)
-      toast.success(initial ? 'Device updated' : 'Device added', d.name)
-      onClose()
-    },
-    onError: (e) => setServerError(e instanceof ApiError ? e.message : 'Could not save the device'),
-  })
-
-  const submit = (e: FormEvent) => {
-    e.preventDefault()
-    setTouched(true)
-    setServerError(null)
-    if (Object.keys(errors).length) return
-    m.mutate(v)
-  }
-  const set = <K extends keyof FormValues>(k: K, val: FormValues[K]) => setV((s) => ({ ...s, [k]: val }))
-
-  return (
-    <Drawer
-      open
-      onClose={onClose}
-      title={initial ? 'Edit device' : 'Add device'}
-      subtitle={initial ? `${initial.name} · ${initial.imei}` : 'Register a tracker by its IMEI'}
-      wide={tab === 'sensors'}
-      footer={
-        tab === 'sensors' ? undefined : (
-        <>
-          <Button onClick={onClose}>Cancel</Button>
-          <Button variant="primary" type="submit" form="device-form" loading={m.isPending}>
-            {initial ? 'Save changes' : 'Add device'}
-          </Button>
-        </>
-        )
-      }
-    >
-      {initial && (
-        <Tabs<'details' | 'sensors'>
-          className="-mt-3 mb-4"
-          value={tab}
-          onChange={setTab}
-          tabs={[
-            { id: 'details', label: 'Details' },
-            { id: 'sensors', label: 'Sensors', count: initial.sensors?.length || undefined },
-          ]}
-        />
-      )}
-      {tab === 'sensors' && initial ? (
-        <Suspense fallback={<Skeleton className="h-40 rounded-xl" />}>
-          <SensorsPanel device={initial} canEdit={canManage} />
-        </Suspense>
-      ) : (
-      <form id="device-form" onSubmit={submit} className="space-y-4" noValidate>
-        {serverError && (
-          <div role="alert" className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-[12.5px] text-rose-700 dark:text-rose-300">
-            {serverError}
-          </div>
-        )}
-        <Field label="Name" required error={show('name')}>
-          {(id, d) => (
-            <Input id={id} aria-describedby={d} data-autofocus value={v.name} invalid={!!show('name')} placeholder="Truck 07" onChange={(e) => set('name', e.target.value)} />
-          )}
-        </Field>
-        {bridged ? (
-          <Field label="Traccar unique ID" required error={show('imei')} hint="Matches the device’s identifier in Traccar">
-            {(id, d) => (
-              <Input id={id} aria-describedby={d} autoComplete="off" className="font-mono" value={v.imei} invalid={!!show('imei')} onChange={(e) => set('imei', e.target.value)} />
-            )}
-          </Field>
-        ) : (
-          <Field label="IMEI" required error={show('imei')} hint="15-digit identifier printed on the tracker">
-            {(id, d) => (
-              <Input
-                id={id}
-                aria-describedby={d}
-                inputMode="numeric"
-                autoComplete="off"
-                maxLength={15}
-                className="font-mono"
-                value={v.imei}
-                invalid={!!show('imei')}
-                placeholder="356307042441013"
-                onChange={(e) => set('imei', e.target.value.replace(/\D/g, ''))}
-                trailing={<span className="tabular pr-1.5 text-[11px] text-slate-400">{v.imei.length}/15</span>}
-              />
-            )}
-          </Field>
-        )}
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Protocol">
-            {(id) => (
-              <Select id={id} value={v.protocol} onChange={(e) => set('protocol', e.target.value)}>
-                {PROTOCOLS.map((p) => (
-                  <option key={p} value={p}>
-                    {p[0].toUpperCase() + p.slice(1)}
-                  </option>
-                ))}
-              </Select>
-            )}
-          </Field>
-          <Field label="Category">
-            {(id) => (
-              <Select id={id} value={v.category} onChange={(e) => set('category', e.target.value)}>
-                {DEVICE_CATEGORIES.map((c) => (
-                  <option key={c} value={c}>
-                    {categoryMeta(c).label}
-                  </option>
-                ))}
-              </Select>
-            )}
-          </Field>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Plate">
-            {(id) => <Input id={id} value={v.plate} placeholder="DXB-A-12345" onChange={(e) => set('plate', e.target.value.toUpperCase())} />}
-          </Field>
-          <Field label="Model">
-            {(id) => <Input id={id} value={v.model} placeholder="FMB920" onChange={(e) => set('model', e.target.value)} />}
-          </Field>
-        </div>
-        <Field label="SIM phone number" error={show('phone')}>
-          {(id, d) => (
-            <Input id={id} aria-describedby={d} type="tel" value={v.phone} invalid={!!show('phone')} placeholder="+971 50 123 4567" onChange={(e) => set('phone', e.target.value)} />
-          )}
-        </Field>
-        <Field
-          label="Speed limit"
-          error={show('speedLimit')}
-          hint={`Overspeed alerts fire above this speed. Leave empty to use the fleet default${defaultLimit ? ` (${defaultLimit} km/h)` : ''}.`}
-        >
-          {(id, d) => (
-            <Input
-              id={id}
-              aria-describedby={d}
-              inputMode="numeric"
-              value={v.speedLimit}
-              invalid={!!show('speedLimit')}
-              placeholder={defaultLimit ? String(defaultLimit) : 'Default'}
-              onChange={(e) => set('speedLimit', e.target.value.replace(/\D/g, '').slice(0, 3))}
-              trailing={<span className="pr-1.5 text-[11px] text-slate-400">km/h</span>}
-            />
-          )}
-        </Field>
-        <div className="space-y-2 rounded-xl border border-slate-200/80 p-3 dark:border-white/[0.07]">
-          <div>
-            <p className="text-[12.5px] font-medium text-slate-800 dark:text-slate-100">Counters</p>
-            <p className="text-[11.5px] text-slate-500 dark:text-slate-400">Calibrate to match the dashboard — maintenance schedules use these values.</p>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Odometer" error={show('odometer')}>
-              {(id, d) => (
-                <Input id={id} aria-describedby={d} inputMode="decimal" value={v.odometer} invalid={!!show('odometer')} placeholder="0" onChange={(e) => set('odometer', e.target.value.replace(/[^\d.]/g, ''))} trailing={<span className="pr-1.5 text-[11px] text-slate-400">km</span>} />
-              )}
-            </Field>
-            <Field label="Engine hours" error={show('engineHours')}>
-              {(id, d) => (
-                <Input id={id} aria-describedby={d} inputMode="decimal" value={v.engineHours} invalid={!!show('engineHours')} placeholder="0" onChange={(e) => set('engineHours', e.target.value.replace(/[^\d.]/g, ''))} trailing={<span className="pr-1.5 text-[11px] text-slate-400">h</span>} />
-              )}
-            </Field>
-          </div>
-        </div>
-        {initial && <DeviceMeta device={initial} />}
-        {initial && (
-          <div className="flex items-center justify-between rounded-lg border border-slate-200/80 px-3 py-2 text-[12.5px] dark:border-white/[0.06]">
-            <span className="text-slate-500 dark:text-slate-400">Connection</span>
-            <SourceBadge source={initial.source} />
-          </div>
-        )}
-      </form>
-      )}
-    </Drawer>
-  )
-}
-
-/** Read-only: groups and current driver are managed under Users & Groups and Drivers. */
-function DeviceMeta({ device }: { device: Device }) {
-  const groups = useGroups()
-  const drivers = useDrivers()
-  const gs = (groups.data ?? []).filter((g) => g.deviceIds.includes(device.id) || device.groupIds?.includes(g.id))
-  const driver = drivers.data?.find((d) => d.id === device.driverId) ?? drivers.data?.find((d) => d.deviceId === device.id)
-  return (
-    <dl className="grid grid-cols-[auto,1fr] items-center gap-x-4 gap-y-2 rounded-lg border border-slate-200/80 px-3 py-2.5 text-[12.5px] dark:border-white/[0.06]">
-      <dt className="text-slate-500 dark:text-slate-400">Groups</dt>
-      <dd className="flex flex-wrap justify-end gap-1">{gs.length ? gs.map((g) => <GroupChip key={g.id} name={g.name} color={g.color} />) : <span className="text-slate-400">None</span>}</dd>
-      <dt className="text-slate-500 dark:text-slate-400">Driver</dt>
-      <dd className="text-right text-slate-900 dark:text-white">{driver?.name ?? <span className="text-slate-400">Not assigned</span>}</dd>
-    </dl>
-  )
-}
 
 function SortHeader({
   k,
@@ -321,7 +65,7 @@ export default function DevicesPage() {
   const [status, setStatus] = useState<DeviceStatus | 'all'>('all')
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: 'name', dir: 1 })
   const [editing, setEditing] = useState<Device | null | 'new'>(null)
-  const [startTab, setStartTab] = useState<'details' | 'sensors'>('details')
+  const [startTab, setStartTab] = useState<EditorTab>('tracker')
   // deep link from the live panel: /devices?sensors=<id>
   const sensorsParam = new URLSearchParams(window.location.search).get('sensors')
   const [linked, setLinked] = useState(false)
@@ -485,7 +229,7 @@ export default function DevicesPage() {
                         <td className="px-4 py-2.5">
                           <div className="flex items-center gap-3">
                             <span className="grid h-8 w-8 place-items-center rounded-lg bg-slate-100 text-slate-500 dark:bg-white/[0.05] dark:text-slate-300">
-                              <CategoryIcon category={d.category} className="h-4 w-4" />
+                              <DeviceGlyph device={d} className="h-4 w-4" />
                             </span>
                             <div className="min-w-0">
                               <div className="truncate font-medium text-slate-900 dark:text-white">{d.name}</div>
@@ -542,6 +286,9 @@ export default function DevicesPage() {
                               <IconButton size="sm" label={`Sensors of ${d.name}`} onClick={() => (setStartTab('sensors'), setEditing(d))}>
                                 <GaugeIcon className="h-3.5 w-3.5" />
                               </IconButton>
+                              <IconButton size="sm" label={`Parameters of ${d.name}`} onClick={() => (setStartTab('params'), setEditing(d))} className="max-md:hidden">
+                                <SlidersHorizontal className="h-3.5 w-3.5" />
+                              </IconButton>
                               <IconButton size="sm" label={`Edit ${d.name}`} onClick={() => setEditing(d)}>
                                 <Pencil className="h-3.5 w-3.5" />
                               </IconButton>
@@ -564,7 +311,7 @@ export default function DevicesPage() {
                 {rows.map((d) => (
                   <li key={d.id} className="flex items-center gap-3 px-3 py-3">
                     <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-slate-100 text-slate-500 dark:bg-white/[0.05] dark:text-slate-300">
-                      <CategoryIcon category={d.category} className="h-4 w-4" />
+                      <DeviceGlyph device={d} className="h-4 w-4" />
                     </span>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
@@ -586,6 +333,9 @@ export default function DevicesPage() {
                       <IconButton size="sm" label={`Sensors of ${d.name}`} onClick={() => (setStartTab('sensors'), setEditing(d))}>
                                 <GaugeIcon className="h-3.5 w-3.5" />
                               </IconButton>
+                              <IconButton size="sm" label={`Parameters of ${d.name}`} onClick={() => (setStartTab('params'), setEditing(d))} className="max-md:hidden">
+                                <SlidersHorizontal className="h-3.5 w-3.5" />
+                              </IconButton>
                               <IconButton size="sm" label={`Edit ${d.name}`} onClick={() => setEditing(d)}>
                         <Pencil className="h-3.5 w-3.5" />
                       </IconButton>
@@ -605,13 +355,13 @@ export default function DevicesPage() {
       </div>
 
       {editing && (
-        <DeviceForm
+        <DeviceEditor
           key={editing === 'new' ? 'new' : editing.id}
           initial={editing === 'new' ? null : editing}
           startTab={startTab}
           onClose={() => {
             setEditing(null)
-            setStartTab('details')
+            setStartTab('tracker')
           }}
         />
       )}

@@ -92,7 +92,80 @@ export interface Device {
   driverId?: number | null
   /** Phase 4a: latest computed sensor values */
   sensors?: DeviceSensorValue[]
+  /** map icon; '' = status arrow */
+  icon?: DeviceIcon | ''
+  /** registration details */
+  details?: DeviceDetails
 }
+
+export const DEVICE_ICONS = ['car', 'taxi', 'van', 'pickup', 'truck', 'tanker', 'bus', 'motorcycle', 'tractor', 'ambulance', 'forklift', 'excavator', 'trailer', 'caravan', 'boat', 'person', 'asset'] as const
+export type DeviceIcon = (typeof DEVICE_ICONS)[number]
+
+export const FUEL_TYPES = ['petrol', 'diesel', 'electric', 'hybrid', 'lpg', 'cng', 'other'] as const
+
+export interface DeviceDetails {
+  vehicle: { vin: string; make: string; model: string; year: number; color: string; fuelType: string; engineNumber: string }
+  sim: { iccid: string; operator: string; installDate: string; installer: string; subscriptionExpiry: string }
+  owner: { name: string; company: string; phone: string; email: string; address: string; idNumber: string }
+  notes: string
+}
+
+export function emptyDetails(): DeviceDetails {
+  return {
+    vehicle: { vin: '', make: '', model: '', year: 0, color: '', fuelType: '', engineNumber: '' },
+    sim: { iccid: '', operator: '', installDate: '', installer: '', subscriptionExpiry: '' },
+    owner: { name: '', company: '', phone: '', email: '', address: '', idNumber: '' },
+    notes: '',
+  }
+}
+
+export type ParamKind = 'mapped' | 'calculated'
+
+export interface ParamDef {
+  id: number
+  /** null = all devices */
+  deviceId: number | null
+  key: string
+  kind: ParamKind
+  name: string
+  expression: string
+  unit: string
+  decimals: number
+  hidden: boolean
+  position: number
+  createdAt: string
+  updatedAt: string
+}
+
+export type ParamInput = Pick<ParamDef, 'deviceId' | 'key' | 'kind' | 'name' | 'expression' | 'unit' | 'decimals' | 'hidden' | 'position'>
+
+export interface ParamTestResult {
+  value: number | boolean | string | null
+  error?: string
+  missing?: boolean
+  time: string | null
+  vars: string[]
+}
+
+export type Severity = 'info' | 'warning' | 'critical'
+
+export interface CustomEvent {
+  id: number
+  name: string
+  condition: string
+  /** empty = all devices */
+  deviceIds: number[]
+  /** seconds the condition must hold */
+  duration: number
+  message: string
+  severity: Severity
+  notifyEnd: boolean
+  enabled: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export type CustomEventInput = Pick<CustomEvent, 'name' | 'condition' | 'deviceIds' | 'duration' | 'message' | 'severity' | 'notifyEnd' | 'enabled'>
 
 export type DeviceSource = 'direct' | 'traccar'
 
@@ -108,6 +181,8 @@ export interface DeviceInput {
   /** Phase 3 calibration (km / hours) */
   odometer?: number
   engineHours?: number
+  icon?: DeviceIcon | ''
+  details?: DeviceDetails
 }
 
 export interface Trip {
@@ -161,6 +236,7 @@ export const EVENT_TYPES = [
   'refuel',
   'sensorHigh',
   'sensorLow',
+  'custom',
 ] as const
 export type EventType = (typeof EVENT_TYPES)[number]
 
@@ -188,6 +264,7 @@ export const NOTIFY_EVENT_TYPES = [
   'refuel',
   'sensorHigh',
   'sensorLow',
+  'custom',
 ] as const
 export type NotifyEventType = (typeof NOTIFY_EVENT_TYPES)[number]
 
@@ -339,6 +416,7 @@ export type WsMessage =
   | { type: 'event'; data: FleetEvent }
   | { type: 'command'; data: Command }
   | { type: 'geofences' }
+  | { type: 'params' }
   | { type: 'notifications' }
   | { type: 'job'; data: Job }
   | { type: 'jobDeleted'; data: { id: number } }

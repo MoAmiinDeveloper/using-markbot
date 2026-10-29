@@ -833,3 +833,64 @@ multiplier 0.1), `io201`/`io203` LLS fuel level, `io25`–`io28` BLE temperature
   (each reading counts until the next, at most 30 min). Both recompute values from stored positions with the current
   calibration, so they also cover data from before the sensor was created; extra row keys `deviceId`, `sensorId`.
 - **Env.** No new variables.
+
+---
+
+# Data parameters, custom events & full registration
+
+## Device registration fields
+`Device` gains two fields, accepted by `POST /devices` and `PATCH /devices/{id}` (with the existing
+`driverId`, `groupIds`, `odometer`, `engineHours`):
+
+| field | type | notes |
+|---|---|---|
+| `icon` | string | `""` (status arrow) or one of `car taxi van pickup truck tanker bus motorcycle tractor ambulance forklift excavator trailer caravan boat person asset` |
+| `details` | object | `{vehicle, sim, owner, notes}` — PATCH replaces the whole object |
+
+`details.vehicle`: `vin` (11–17 chars, no I/O/Q, upper-cased), `make`, `model`, `year` (0 or 1950–2100),
+`color`, `fuelType` (`"" petrol diesel electric hybrid lpg cng other`), `engineNumber`.
+`details.sim`: `iccid` (18–22 digits), `operator`, `installDate`, `installer`, `subscriptionExpiry` (dates `YYYY-MM-DD`).
+`details.owner`: `name`, `company`, `phone`, `email`, `address`, `idNumber`. `details.notes`: up to 2000 chars.
+
+## Parameters
+`ParamDef`: `{id, deviceId|null, key, kind: "mapped"|"calculated", name, expression, unit, decimals, hidden, position, createdAt, updatedAt}`.
+`deviceId: null` applies to all devices; a device-specific definition with the same key replaces it for that device.
+
+* **mapped** — a display name/unit for a raw attribute key (`io9` → "Fuel probe"). No effect on stored data.
+* **calculated** — `expression` is evaluated at ingest on every fix (in `position` order, so later formulas can
+  use earlier results) and the result is stored in `position.attributes[key]` (numbers rounded to `decimals`).
+  It is then available everywhere attributes are: live, history, sensors (`source`), reports and custom events.
+  If an input is missing from a fix, the key is not set on that fix. Keys cannot be position fields.
+
+| Method | Path | Access |
+|---|---|---|
+| GET | `/params?deviceId=` | all (device-specific ones only for visible devices) |
+| POST | `/params` | manager (own devices) · admin for `deviceId: null` |
+| PUT | `/params/{id}` | same |
+| DELETE | `/params/{id}` | same |
+| POST | `/params/test` | manager — `{expression, deviceId}` → `{value, error?, missing?, time, vars}` on the device's latest fix |
+
+Live: a `{"type":"params"}` WebSocket message is sent when definitions change. Duplicate key in the same scope → 409.
+
+### Formula language
+Identifiers: `speed course altitude satellites lat lng valid priority eventId` and any attribute key. Numbers
+(incl. `0x1F`, `1e3`), `true/false`, strings in quotes. Operators `+ - * / %`, `== != < <= > >=`, `&& || !`
+(or `and or not`), `cond ? a : b`. Functions: `abs min max round(x[,d]) floor ceil sqrt pow if(c,a,b)
+between(x,lo,hi) bit(x,n) has(key)`. Booleans count as 1/0 in arithmetic. Max 500 characters.
+
+## Custom events
+`CustomEvent`: `{id, name, condition, deviceIds (empty = all), duration (s, 0–86400), message, severity:
+"info"|"warning"|"critical", notifyEnd, enabled, createdAt, updatedAt}`.
+
+The condition is evaluated on every new fix of each covered device. When it has been true for `duration`
+seconds an event of type **`custom`** is raised (`attributes: {customEventId, name, severity, phase: "start",
+duration}`); with `notifyEnd`, a second one with `phase: "end"` when it becomes false. Fixes missing an input
+leave the state unchanged. `message` is a template: `{device}`, `{plate}`, `{name}` and any parameter key.
+`custom` is a notification type like the others (`/me/notifications`).
+
+| Method | Path | Access |
+|---|---|---|
+| GET | `/custom-events` | all (managers see those limited to their devices) |
+| POST | `/custom-events` | manager (own devices) · admin for all devices |
+| PUT | `/custom-events/{id}` | same |
+| DELETE | `/custom-events/{id}` | same |

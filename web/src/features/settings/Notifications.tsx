@@ -23,6 +23,7 @@ const GROUPS: Array<{ label: string; types: NotifyEventType[] }> = [
   { label: 'Dispatch', types: ['jobAssigned', 'jobStatus', 'jobStopArrived', 'jobLate'] },
   { label: 'Routes', types: ['routeDeviation', 'routeReturn'] },
   { label: 'Sensors & fuel', types: ['fuelDrain', 'refuel', 'sensorHigh', 'sensorLow'] },
+  { label: 'Custom events', types: ['custom'] },
 ]
 
 /** Server defaults for keys an older server may not return yet. */

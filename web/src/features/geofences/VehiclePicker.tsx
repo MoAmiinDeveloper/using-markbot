@@ -69,7 +69,7 @@ export function VehiclePicker({
                     >
                       {on && <Check className="h-3 w-3" strokeWidth={3} />}
                     </span>
-                    <CategoryIcon category={d.category} className="h-3.5 w-3.5 text-slate-400" />
+                    <CategoryIcon category={d.category} icon={d.icon} className="h-3.5 w-3.5 text-slate-400" />
                     <span className="min-w-0 flex-1 truncate text-[12.5px] text-slate-800 dark:text-slate-100">{d.name}</span>
                     {d.plate && <span className="shrink-0 text-[11px] text-slate-400">{d.plate}</span>}
                   </button>

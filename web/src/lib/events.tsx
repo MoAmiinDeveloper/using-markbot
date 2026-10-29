@@ -20,6 +20,7 @@ import {
   LogOut,
   PowerOff,
   Siren,
+  Sparkles,
   Terminal,
   Wrench,
   type LucideIcon,
@@ -250,6 +251,15 @@ export const EVENT_META: Record<EventType, EventMeta> = {
     chip: 'bg-sky-600/12 text-sky-700 dark:text-sky-400',
     pill: 'bg-sky-600/12 text-sky-800 ring-sky-600/25 dark:text-sky-300',
   },
+  custom: {
+    label: 'Custom event',
+    short: 'Custom',
+    description: 'A custom event you defined from parameters',
+    icon: Sparkles,
+    color: '#d4a800',
+    chip: 'bg-brand-500/15 text-brand-700 dark:text-brand-300',
+    pill: 'bg-brand-500/15 text-brand-800 ring-brand-500/30 dark:text-brand-200',
+  },
 }
 
 /** Event types that belong to a job (toasts open the job instead of the vehicle). */
@@ -343,6 +353,12 @@ export function eventDetail(e: FleetEvent): string | null {
       const unit = typeof a.unit === 'string' ? a.unit : ''
       const name = typeof a.sensorName === 'string' ? `${a.sensorName} ` : ''
       return v != null ? `${name}${fmt1(v)}${unit}${lim != null ? ` · limit ${fmt1(lim)}${unit}` : ''}` : null
+    }
+    case 'custom': {
+      const name = typeof a.name === 'string' ? a.name : null
+      const phase = a.phase === 'end' ? 'ended' : null
+      const sev = typeof a.severity === 'string' && a.severity !== 'warning' ? a.severity : null
+      return [name, phase, sev].filter(Boolean).join(' · ') || null
     }
     default:
       return null

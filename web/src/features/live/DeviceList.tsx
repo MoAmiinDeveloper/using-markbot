@@ -32,7 +32,7 @@ function Row({ d, selected, onClick, now }: { d: Device; selected: boolean; onCl
         className="relative grid h-10 w-10 shrink-0 place-items-center rounded-xl"
         style={{ background: `${m.color}1f`, color: m.color }}
       >
-        <CategoryIcon category={d.category} className="h-[18px] w-[18px]" />
+        <CategoryIcon category={d.category} icon={d.icon} className="h-[18px] w-[18px]" />
         <span
           className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white dark:border-ink-900"
           style={{ background: m.color }}

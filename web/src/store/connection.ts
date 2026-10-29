@@ -215,6 +215,9 @@ class LiveConnection {
       case 'geofences':
         void queryClient.invalidateQueries({ queryKey: qk.geofences })
         return
+      case 'params':
+        void queryClient.invalidateQueries({ queryKey: qk.params })
+        return
       case 'notifications':
         void queryClient.invalidateQueries({ queryKey: qk.notificationPrefs })
         return

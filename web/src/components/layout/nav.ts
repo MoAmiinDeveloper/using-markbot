@@ -15,6 +15,8 @@ import {
   Map,
   Settings,
   ShieldCheck,
+  SlidersHorizontal,
+  Sparkles,
   Wrench,
   type LucideIcon,
 } from 'lucide-react'
@@ -52,7 +54,8 @@ export const NAV: NavItem[] = [
   { to: '/geofences', label: 'Geofences', icon: Hexagon, section: 'manage', keywords: 'zones places poi routes corridor', description: 'Zones, places and planned routes' },
   { to: '/drivers', label: 'Drivers', icon: IdCard, section: 'manage', keywords: 'ibutton rfid license score', description: 'Drivers, licences and behaviour' },
   { to: '/maintenance', label: 'Maintenance', icon: Wrench, section: 'manage', keywords: 'service reminders documents expenses fuel', description: 'Service schedules, documents & expenses' },
-  { to: '/devices', label: 'Devices', icon: Cpu, section: 'manage', keywords: 'trackers imei odometer', description: 'Trackers and vehicle settings' },
+  { to: '/devices', label: 'Devices', icon: Cpu, section: 'manage', keywords: 'trackers imei odometer register owner sim icon', description: 'Trackers, vehicles and owners' },
+  { to: '/parameters', label: 'Parameters', icon: SlidersHorizontal, section: 'manage', keywords: 'io data parameters attributes calculated formula virtual mapping custom events', description: 'Data parameters, formulas & custom events' },
   { to: '/admin', label: 'Users & Groups', icon: ShieldCheck, section: 'system', adminOnly: true, keywords: 'admin users roles groups permissions', description: 'Accounts, roles and vehicle groups' },
   { to: '/settings', label: 'Settings', icon: Settings, section: 'system', keywords: 'notifications telegram profile password', description: 'Notifications, rules and your profile' },
 ]
@@ -73,6 +76,8 @@ export const SUB_SCREENS: SubScreen[] = [
   { to: '/reports?view=schedules', label: 'Scheduled reports', icon: CalendarClock, keywords: 'schedules email telegram automatic daily weekly', description: 'Reports · automatic delivery by email & Telegram' },
   { to: '/reports?type=fuel', label: 'Fuel report', icon: Gauge, keywords: 'fuel sensor drain refuel consumption', description: 'Reports · levels, refuels and drains' },
   { to: '/devices', label: 'Sensors', icon: Gauge, keywords: 'sensors fuel temperature calibration io', description: 'Devices · edit a device → Sensors', manage: true },
+  { to: '/parameters?tab=events', label: 'Custom events', icon: Sparkles, keywords: 'custom events rules conditions alerts formula', description: 'Parameters · alerts from your own conditions' },
+  { to: '/parameters?tab=calculated', label: 'Calculated parameters', icon: SlidersHorizontal, keywords: 'virtual calculated formula parameters', description: 'Parameters · formulas on tracker data' },
   { to: '/settings#email', label: 'Email (SMTP)', icon: Mail, keywords: 'smtp email mail server', description: 'Settings · outgoing email', adminOnly: true },
   { to: '/settings#driver-app', label: 'Driver app', icon: Smartphone, keywords: 'driver app phone tracking android', description: 'Settings · driver app tracking', adminOnly: true },
 ]

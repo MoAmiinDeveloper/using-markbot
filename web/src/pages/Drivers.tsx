@@ -482,7 +482,7 @@ export default function DriversPage() {
     return (
       <button type="button" onClick={() => nav(`/live?device=${dev.id}`)} className="inline-flex max-w-full items-center gap-1.5 rounded text-left hover:text-navy-600 dark:hover:text-brand-300">
         <StatusDot status={dev.status} />
-        <CategoryIcon category={dev.category} className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+        <CategoryIcon category={dev.category} icon={dev.icon} className="h-3.5 w-3.5 shrink-0 text-slate-400" />
         <span className="truncate">{dev.name}</span>
       </button>
     )

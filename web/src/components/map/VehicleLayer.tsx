@@ -9,12 +9,14 @@ import type { Device, DeviceStatus } from '@/api/types'
 import { STATUS_META, STATUSES } from '@/lib/status'
 import { bearing, lerpAngle } from '@/lib/geo'
 import { useMapCtx } from './MapCanvas'
-import { vehicleIconName } from './icons'
+import { glyphIconName, ringIconName, vehicleIconName } from './icons'
 
 const SRC = 'vehicles'
 const SRC_SEL = 'vehicles-selected'
 const LAYER = 'vehicles-icons'
 const LAYER_SEL = 'vehicles-selected-icon'
+const LAYER_GLYPH = 'vehicles-glyphs'
+const LAYER_SEL_GLYPH = 'vehicles-selected-glyph'
 const ANIM_MS = 1100
 /** longest time spent driving a marker through one batch of fixes */
 const MAX_PATH_MS = 8000
@@ -109,7 +111,23 @@ function addLayers(map: MlMap, cluster: boolean) {
       filter: ['!', ['has', 'point_count']],
       layout: { ...layout, 'symbol-sort-key': ['get', 'rank'] },
     })
+  // own vehicle icons: upright glyph over the rotated status ring
+  const glyphLayout: SymbolLayerSpecification['layout'] = {
+    'icon-image': ['get', 'glyph'],
+    'icon-allow-overlap': true,
+    'icon-ignore-placement': true,
+  }
+  if (!map.getLayer(LAYER_GLYPH))
+    map.addLayer({
+      id: LAYER_GLYPH,
+      type: 'symbol',
+      source: SRC,
+      filter: ['all', ['!', ['has', 'point_count']], ['!=', ['get', 'glyph'], '']],
+      layout: { ...glyphLayout, 'symbol-sort-key': ['get', 'rank'] },
+    })
   if (!map.getLayer(LAYER_SEL)) map.addLayer({ id: LAYER_SEL, type: 'symbol', source: SRC_SEL, layout })
+  if (!map.getLayer(LAYER_SEL_GLYPH))
+    map.addLayer({ id: LAYER_SEL_GLYPH, type: 'symbol', source: SRC_SEL, filter: ['!=', ['get', 'glyph'], ''], layout: glyphLayout })
 }
 
 function clusterElement(props: Record<string, number>, count: number): HTMLElement {
@@ -224,7 +242,8 @@ export function VehicleLayer({
         properties: {
           id: d.id,
           status,
-          icon: vehicleIconName(status, isSel),
+          icon: d.icon ? ringIconName(status, isSel) : vehicleIconName(status, isSel),
+          glyph: d.icon ? glyphIconName(d.icon) : '',
           rot: rotates ? rot : 0,
           rank: status === 'moving' ? 3 : status === 'idle' ? 2 : 1,
         },

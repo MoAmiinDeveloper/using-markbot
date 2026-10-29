@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { api, qk } from '@/api/client'
-import type { Driver, Group, Place } from '@/api/types'
+import type { CustomEvent, Driver, Group, ParamDef, Place } from '@/api/types'
 
 /** Shared, long-lived lookups (groups, drivers, places, settings). Failures stay silent: callers degrade. */
 export function useGroups(enabled = true) {
@@ -21,4 +21,13 @@ export function useSettings() {
 
 export function useCurrency(): string {
   return useSettings().data?.currency || 'USD'
+}
+
+/** Parameter names and calculated parameters (kept fresh by the live 'params' message). */
+export function useParamDefs(enabled = true) {
+  return useQuery<ParamDef[]>({ queryKey: qk.params, queryFn: () => api.params(), staleTime: 10 * 60_000, enabled, meta: { silent: true } })
+}
+
+export function useCustomEvents(enabled = true) {
+  return useQuery<CustomEvent[]>({ queryKey: qk.customEvents, queryFn: api.customEvents, staleTime: 60_000, enabled, meta: { silent: true } })
 }
