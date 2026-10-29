@@ -74,6 +74,8 @@ type Options struct {
 	Logger    *slog.Logger
 	// Now overrides the clock (tests).
 	Now func() time.Time
+	// Location decides where "today" starts for TodayKm. Defaults to time.Local.
+	Location *time.Location
 }
 
 // Device is the API representation of a tracker together with its live state.
@@ -103,6 +105,11 @@ type Device struct {
 
 	// Phase 4a (automation module): latest calibrated sensor values.
 	Sensors []SensorValue `json:"sensors"`
+
+	// Activity: start of the current status (moving/idle/stopped: from the
+	// fixes; offline: last contact) and distance driven today.
+	StatusSince *time.Time `json:"statusSince"`
+	TodayKm     float64    `json:"todayKm"`
 
 	// Full registration: map icon ('' = status arrow) and vehicle/SIM/owner details.
 	Icon    string        `json:"icon"`
@@ -182,6 +189,9 @@ func New(ctx context.Context, pool *pgxpool.Pool, opts Options) (*Store, error) 
 	if opts.Now == nil {
 		opts.Now = time.Now
 	}
+	if opts.Location == nil {
+		opts.Location = time.Local
+	}
 	if err := Migrate(ctx, pool); err != nil {
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
@@ -235,7 +245,8 @@ func scanDevice(row pgx.Row, extra ...any) (Device, error) {
 
 func (s *Store) loadCache(ctx context.Context) error {
 	rows, err := s.pool.Query(ctx, `SELECT `+deviceColumns+`, s.position, s.last_seen,
-			COALESCE(s.gps_distance, 0), COALESCE(s.engine_seconds, 0), s.tracker_odometer
+			COALESCE(s.gps_distance, 0), COALESCE(s.engine_seconds, 0), s.tracker_odometer,
+			s.motion_since, COALESCE(s.day_key, ''), COALESCE(s.day_start_km, 0)
 		FROM devices d LEFT JOIN device_state s ON s.device_id = d.id`)
 	if err != nil {
 		return err
@@ -248,7 +259,9 @@ func (s *Store) loadCache(ctx context.Context) error {
 			lastSeen *time.Time
 			c        counters
 		)
-		d, err := scanDevice(rows, &posJSON, &lastSeen, &c.gpsDistance, &c.engineSeconds, &c.trackerOdometer)
+		var motionSince *time.Time
+		d, err := scanDevice(rows, &posJSON, &lastSeen, &c.gpsDistance, &c.engineSeconds, &c.trackerOdometer,
+			&motionSince, &c.dayKey, &c.dayStartKm)
 		if err != nil {
 			return err
 		}
@@ -264,6 +277,13 @@ func (s *Store) loadCache(ctx context.Context) error {
 			d.Position = &p
 		}
 		c.init(d.Position)
+		if motionSince != nil {
+			t := motionSince.UTC()
+			c.motionSince = &t
+		} else if d.Position != nil {
+			t := d.Position.DeviceTime
+			c.motionSince = &t
+		}
 		e := &deviceEntry{dev: d, counters: c}
 		e.lastStatus = s.status(&e.dev, now)
 		s.devices[d.ID] = e
@@ -306,6 +326,15 @@ func (s *Store) view(e *deviceEntry, now time.Time) Device {
 	d.EngineHours = round1(e.engineSeconds/3600 + d.hoursOffset)
 	d.DriverID = s.currentDriver(d.ID, e.driverTag)
 	d.Sensors = s.deviceSensorValues(d.ID)
+	switch d.Status {
+	case StatusOffline:
+		d.StatusSince = d.LastSeen
+	case StatusMoving, StatusIdle, StatusStopped:
+		d.StatusSince = e.motionSince
+	}
+	if e.dayKey != "" && e.dayKey == dayKey(now, s.opts.Location) {
+		d.TodayKm = round1(max(0, e.odometerKm()-e.dayStartKm))
+	}
 	return d
 }
 

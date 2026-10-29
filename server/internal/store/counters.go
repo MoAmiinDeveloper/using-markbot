@@ -28,7 +28,25 @@ type counters struct {
 	trackerOdometer *float64         // m, last odometer reported by the tracker
 	lastFix         *domain.Position // last valid in-order fix (distance origin)
 	driverTag       string           // upper-case iButton/RFID tag of the current driver, "" = none
+	motionSince     *time.Time       // device time the current moving/idle/stopped state began
+	dayKey          string           // local day of dayStartKm (YYYY-MM-DD)
+	dayStartKm      float64          // odometerKm() when dayKey began
 }
+
+// Motion states derived from a single fix (the live status without offline).
+func motionOf(p *domain.Position) string {
+	switch {
+	case p.Speed > MovingSpeed:
+		return StatusMoving
+	case ignitionOn(p.Attributes):
+		return StatusIdle
+	default:
+		return StatusStopped
+	}
+}
+
+// dayKey is the local calendar day of t.
+func dayKey(t time.Time, loc *time.Location) string { return t.In(loc).Format(time.DateOnly) }
 
 func (c *counters) init(latest *domain.Position) {
 	if latest != nil && validFix(latest) {
@@ -54,6 +72,8 @@ type counterDelta struct {
 	lastFix  *domain.Position
 	tag      string
 	tagSet   bool
+	// motionSince is set when the batch changes the moving/idle/stopped state.
+	motionSince *time.Time
 }
 
 func validFix(p *domain.Position) bool {
@@ -145,6 +165,10 @@ func computeDeltas(ps []domain.Position, latest, lastFix map[int64]*domain.Posit
 		if odo, ok := numAttr(p.Attributes, domain.AttrOdometer); ok && odo > 0 {
 			d.odometer = &odo
 		}
+		if prev == nil || motionOf(prev) != motionOf(p) {
+			t := p.DeviceTime
+			d.motionSince = &t
+		}
 		if tag := driverTagOf(p); tag != "" {
 			d.tag, d.tagSet = tag, true
 		} else if on, ok := p.Attributes[domain.AttrIgnition].(bool); ok && !on {
@@ -168,6 +192,9 @@ func (c *counters) apply(d *counterDelta) {
 	}
 	if d.tagSet {
 		c.driverTag = d.tag
+	}
+	if d.motionSince != nil {
+		c.motionSince = d.motionSince
 	}
 }
 

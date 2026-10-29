@@ -87,7 +87,7 @@ export function ReportTable({
                   scope="col"
                   aria-sort={active ? (sort!.dir === 1 ? 'ascending' : 'descending') : 'none'}
                   className={cn(
-                    'sticky top-0 z-20 border-b border-slate-200 bg-slate-50 px-3 py-2.5 font-medium text-slate-500 dark:border-white/[0.07] dark:bg-ink-850 dark:text-slate-400',
+                    'sticky top-0 z-20 border-b border-navy-100 bg-navy-50 px-3 py-2.5 font-semibold text-navy-700/80 dark:border-white/[0.07] dark:bg-ink-850 dark:text-slate-400',
                     num ? 'text-right' : 'text-left',
                     i === 0 && 'left-0 z-30 shadow-[1px_0_0_rgb(226_232_240)] dark:shadow-[1px_0_0_rgb(255_255_255/0.07)]',
                   )}
@@ -105,7 +105,7 @@ export function ReportTable({
                 </th>
               )
             })}
-            <th className="sticky top-0 z-20 border-b border-slate-200 bg-slate-50 dark:border-white/[0.07] dark:bg-ink-850" aria-hidden />
+            <th className="sticky top-0 z-20 border-b border-navy-100 bg-navy-50 dark:border-white/[0.07] dark:bg-ink-850" aria-hidden />
           </tr>
         </thead>
         <tbody>

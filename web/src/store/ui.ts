@@ -31,7 +31,8 @@ interface UiState {
   setMapStyle: (s: MapStyleId) => void
 }
 
-const initialTheme: Theme = readLS('fleet.theme') === 'light' ? 'light' : 'dark'
+// Light by default (the reference design); dark stays one click away.
+const initialTheme: Theme = readLS('fleet.theme') === 'dark' ? 'dark' : 'light'
 const storedStyle = readLS('fleet.mapStyle')
 const initialStyle: MapStyleId =
   storedStyle === 'google' || storedStyle === 'googleSatellite' || storedStyle === 'streets' || storedStyle === 'osm' || storedStyle === 'light' || storedStyle === 'dark' || storedStyle === 'satellite'

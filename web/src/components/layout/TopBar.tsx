@@ -1,6 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
-import { LogOut, Moon, Sun, Settings } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { ChevronRight, Lightbulb, LightbulbOff, LogOut, Settings } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
+import { api, qk } from '@/api/client'
+import { cn } from '@/lib/cn'
 import { useAuth } from '@/store/auth'
 import { useUi } from '@/store/ui'
 import { IconButton } from '@/components/ui/Button'
@@ -8,7 +11,7 @@ import { ConnectionBadge } from './ConnectionBadge'
 import { GlobalSearch } from './GlobalSearch'
 import { Link } from 'react-router-dom'
 import { APP_NAME } from '@/config'
-import { Logo, LogoMark } from './Logo'
+import { Logo } from './Logo'
 import { NotificationBell } from './NotificationBell'
 import { RoleBadge } from '@/components/ui/Badges'
 
@@ -84,28 +87,68 @@ export function UserMenu() {
   )
 }
 
+/** Light / dark switch (a bulb, like the reference design). */
 export function ThemeToggle() {
   const { theme, toggleTheme } = useUi()
   return (
     <IconButton label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} onClick={toggleTheme}>
-      {theme === 'dark' ? <Sun className="h-[18px] w-[18px]" /> : <Moon className="h-[18px] w-[18px]" />}
+      {theme === 'dark' ? <LightbulbOff className="h-[18px] w-[18px]" /> : <Lightbulb className="h-[18px] w-[18px]" />}
     </IconButton>
   )
 }
 
-export function TopBar({ title }: { title: string }) {
+/** SOS alarms of the last 24 h; opens the alarm list. */
+export function SosButton() {
+  const nav = useNavigate()
+  // hour-aligned so the query key is stable between renders
+  const from = useMemo(() => new Date(Math.floor(Date.now() / 3_600_000) * 3_600_000 - 24 * 3_600_000).toISOString(), [])
+  const q = { type: 'alarm', from, limit: 200 }
+  const alarms = useQuery({ queryKey: qk.events(q), queryFn: () => api.events(q), refetchInterval: 60_000, meta: { silent: true } })
+  const count = (alarms.data ?? []).filter((e) => e.attributes?.alarm === 'sos').length
   return (
-    // Brand bar: always Somtel navy; the `dark` class gives children their on-navy styling.
-    <header className="dark relative z-20 flex h-14 shrink-0 items-center gap-3 border-b-2 border-brand-500 bg-navy-700 px-3 text-white sm:px-4">
-      <Link to="/live" aria-label={`${APP_NAME} home`} className="flex shrink-0 items-center rounded-lg md:w-[52px] lg:w-auto">
-        <Logo size="h-11" className="hidden text-white lg:inline-flex" />
-        <LogoMark className="h-9 w-9 lg:hidden" />
+    <button
+      type="button"
+      onClick={() => nav('/alerts?type=alarm')}
+      title={count ? `${count} SOS alarm${count === 1 ? '' : 's'} in the last 24 hours` : 'No SOS alarms in the last 24 hours'}
+      className={cn(
+        'inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-[11.5px] font-bold tracking-wider transition-colors',
+        count
+          ? 'animate-pulse border-rose-500 bg-rose-500 text-white shadow-sm shadow-rose-500/40'
+          : 'border-rose-300 bg-rose-50 text-rose-600 hover:bg-rose-100 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-300',
+      )}
+    >
+      SOS
+      {count > 0 && <span className="tabular rounded-full bg-white/25 px-1.5 text-[10.5px]">{count}</span>}
+    </button>
+  )
+}
+
+/** Light page header: brand wordmark, breadcrumb (section › page), search and actions. */
+export function TopBar({ section, title }: { section?: string; title: string }) {
+  return (
+    <header className="relative z-20 flex h-14 shrink-0 items-center gap-3 border-b border-slate-200/80 bg-white px-3 dark:border-white/[0.06] dark:bg-ink-900 sm:px-4">
+      <Link to="/live" aria-label={`${APP_NAME} home`} className="flex shrink-0 items-center rounded-lg md:hidden">
+        <Logo size="h-9" className="text-navy-700 dark:text-white [&>span:last-child]:hidden" />
       </Link>
-      <span className="hidden h-6 w-px bg-white/15 lg:block" aria-hidden />
-      <h1 className="hidden min-w-[96px] text-[15px] font-semibold tracking-tight text-white lg:block">{title}</h1>
-      <GlobalSearch className="max-w-md flex-1" />
+      <Link to="/live" aria-label={`${APP_NAME} home`} className="hidden shrink-0 items-center rounded-lg xl:flex">
+        <Logo size="h-10" className="text-navy-700 dark:text-white" />
+      </Link>
+      <span className="hidden h-7 w-px bg-slate-200 dark:bg-white/10 xl:block" aria-hidden />
+      <div className="hidden min-w-[120px] leading-tight md:block">
+        {section && (
+          <p className="flex items-center gap-1 text-[11px] font-medium text-slate-400">
+            {section} <ChevronRight className="h-3 w-3" />
+          </p>
+        )}
+        <h1 className="text-[15px] font-semibold tracking-tight text-navy-800 dark:text-white">{title}</h1>
+      </div>
+      <GlobalSearch className="mx-auto max-w-md flex-1" />
       <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
-        <ConnectionBadge compact />
+        <span className="hidden sm:contents">
+          <ConnectionBadge compact />
+        </span>
+        <SosButton />
+        <span className="hidden h-6 w-px bg-slate-200 dark:bg-white/10 sm:block" aria-hidden />
         <span className="hidden sm:contents">
           <ThemeToggle />
         </span>

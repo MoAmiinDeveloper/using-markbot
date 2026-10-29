@@ -92,6 +92,10 @@ export interface Device {
   driverId?: number | null
   /** Phase 4a: latest computed sensor values */
   sensors?: DeviceSensorValue[]
+  /** start of the current status (moving/idle/stopped from the fixes, offline = last contact) */
+  statusSince?: string | null
+  /** km driven since local midnight */
+  todayKm?: number
   /** map icon; '' = status arrow */
   icon?: DeviceIcon | ''
   /** registration details */

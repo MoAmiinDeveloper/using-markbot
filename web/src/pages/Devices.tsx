@@ -199,7 +199,7 @@ export default function DevicesPage() {
               {/* table on >= md */}
               <div className="hidden overflow-x-auto md:block">
                 <table className="w-full text-[13px]">
-                  <thead className="bg-slate-50/80 text-[12px] text-slate-500 dark:bg-white/[0.02] dark:text-slate-400">
+                  <thead className="bg-navy-50/80 text-navy-700/80 [&_th]:font-semibold text-[12px] dark:bg-white/[0.02] dark:text-slate-400">
                     <tr>
                       <SortHeader k="name" label="Name" sort={sort} onSort={onSort} />
                       <SortHeader k="status" label="Status" sort={sort} onSort={onSort} />

@@ -3,15 +3,20 @@ import { NavLink, useLocation } from 'react-router-dom'
 import { Ellipsis } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { SECTION_LABEL, useNav, type NavItem } from './nav'
+import { Link } from 'react-router-dom'
+import { LogoMark } from './Logo'
 
 export function NavRail() {
   const items = useNav()
   return (
     <nav
       aria-label="Main"
-      className="dark relative z-30 hidden w-[68px] shrink-0 flex-col items-center overflow-y-auto overflow-x-hidden bg-navy-800 py-3 [scrollbar-width:none] md:flex"
+      className="dark relative z-30 hidden w-[68px] shrink-0 flex-col items-center overflow-y-auto overflow-x-hidden bg-navy-700 pb-3 [scrollbar-width:none] md:flex"
     >
-      <ul className="flex flex-1 flex-col items-center gap-1.5">
+      <Link to="/live" aria-label="Home" className="grid h-14 w-full shrink-0 place-items-center border-b border-white/[0.08]">
+        <LogoMark className="h-9 w-9 [&>rect]:fill-navy-800" />
+      </Link>
+      <ul className="mt-3 flex flex-1 flex-col items-center gap-1.5">
         {items.map(({ to, label, icon: Icon, section }, i) => (
           <li
             key={to}

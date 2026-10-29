@@ -119,3 +119,16 @@ export function daysUntil(d: string | null | undefined, now = Date.now()): numbe
 }
 
 export const todayISO = () => format(Date.now(), 'yyyy-MM-dd')
+
+/** Compact elapsed time for status lines: "45 s", "12 min", "1 h 35 min", "3 d 4 h". */
+export function fmtSince(iso: string | null | undefined, now: number = Date.now()): string {
+  if (!iso) return ''
+  const s = Math.max(0, Math.round((now - Date.parse(iso)) / 1000))
+  if (s < 60) return `${s} s`
+  const m = Math.floor(s / 60)
+  if (m < 60) return `${m} min`
+  const h = Math.floor(m / 60)
+  if (h < 24) return m % 60 ? `${h} h ${m % 60} min` : `${h} h`
+  const d = Math.floor(h / 24)
+  return h % 24 ? `${d} d ${h % 24} h` : `${d} d`
+}

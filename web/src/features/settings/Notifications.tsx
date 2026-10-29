@@ -336,7 +336,7 @@ export function NotificationsSection({ settings }: { settings: Settings | undefi
 
           <div className="overflow-hidden rounded-xl border border-slate-200/80 dark:border-white/[0.07]">
             <table className="w-full text-[13px]">
-              <thead className="bg-slate-50/80 text-[11.5px] text-slate-500 dark:bg-white/[0.02] dark:text-slate-400">
+              <thead className="bg-navy-50/80 text-navy-700/80 [&_th]:font-semibold text-[11.5px] dark:bg-white/[0.02] dark:text-slate-400">
                 <tr>
                   <th scope="col" className="px-3 py-2 text-left font-medium sm:px-4">
                     Event

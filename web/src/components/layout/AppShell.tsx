@@ -10,7 +10,7 @@ import { liveConnection } from '@/store/connection'
 import { startClock } from '@/store/now'
 import { BottomNav, NavRail } from './NavRail'
 import { TopBar } from './TopBar'
-import { NAV } from './nav'
+import { NAV, SECTION_LABEL } from './nav'
 import { normRole } from '@/lib/access'
 import { Smartphone } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
@@ -83,20 +83,19 @@ export function AppShell() {
   if (!token) return <Navigate to="/login" replace state={{ from: loc.pathname + loc.search }} />
   if (user?.role === 'driver') return <DriverNotice />
 
-  const title = NAV.find((n) => loc.pathname.startsWith(n.to))?.label ?? ''
+  const navItem = NAV.find((n) => loc.pathname.startsWith(n.to))
+  const title = navItem?.label ?? ''
   if (loc.pathname.startsWith('/admin') && user && normRole(user.role) !== 'admin') return <Navigate to="/live" replace />
 
   return (
-    <div className="flex h-full w-full flex-col overflow-hidden">
-      <TopBar title={title} />
-      <div className="flex min-h-0 flex-1">
-        <NavRail />
-        <div className="flex min-w-0 flex-1 flex-col">
-          <main className="relative min-h-0 flex-1 overflow-hidden">
-            <Outlet />
-          </main>
-          <BottomNav />
-        </div>
+    <div className="flex h-full w-full overflow-hidden">
+      <NavRail />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <TopBar section={navItem ? SECTION_LABEL[navItem.section] : undefined} title={title} />
+        <main className="relative min-h-0 flex-1 overflow-hidden">
+          <Outlet />
+        </main>
+        <BottomNav />
       </div>
     </div>
   )

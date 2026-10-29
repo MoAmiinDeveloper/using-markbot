@@ -61,7 +61,7 @@ export function ParamsTable({ device, compact }: { device: Device; compact?: boo
       </p>
       <div className="overflow-hidden rounded-lg border border-slate-200/80 dark:border-white/[0.07]">
         <table className="w-full text-[12.5px]">
-          <thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500 dark:bg-white/[0.03] dark:text-slate-400">
+          <thead className="bg-navy-50/80 text-navy-700/80 text-[11px] uppercase tracking-wide dark:bg-white/[0.03] dark:text-slate-400">
             <tr>
               <th scope="col" className="px-2.5 py-1.5 text-left font-medium">
                 Parameter

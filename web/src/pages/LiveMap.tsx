@@ -16,6 +16,7 @@ import { useGeofences } from '@/features/geofences/useGeofences'
 import { useUi } from '@/store/ui'
 import { eventMeta } from '@/lib/events'
 import { DeviceList } from '@/features/live/DeviceList'
+import { LiveTable } from '@/features/live/LiveTable'
 import { DeviceDetail } from '@/features/live/DeviceDetail'
 import { useDevice, useDeviceList, useLive } from '@/store/live'
 import { liveConnection } from '@/store/connection'
@@ -142,6 +143,13 @@ export function LiveMapPage() {
   }, [selectedId, loaded, selected, select])
 
   const showDetail = !!selected
+  const tableView = params.get('view') === 'table' && desktop
+  if (tableView)
+    return (
+      <div className="absolute inset-0 overflow-hidden">
+        <LiveTable devices={devices} onShowMap={() => setParams({}, { replace: true })} onOpen={(id) => setParams({ device: String(id) }, { replace: true })} />
+      </div>
+    )
 
   return (
     <div className="absolute inset-0">
@@ -169,7 +177,7 @@ export function LiveMapPage() {
             aria-label="Vehicle list"
             className={cn(
               'glass pointer-events-auto absolute flex flex-col overflow-hidden rounded-2xl transition-[height,transform,opacity] duration-300 ease-out',
-              'inset-x-2 bottom-2 md:inset-x-auto md:bottom-3 md:left-3 md:top-3 md:h-auto md:w-[340px] md:translate-y-0 md:opacity-100',
+              'inset-x-2 bottom-2 md:inset-x-auto md:bottom-3 md:left-3 md:top-3 md:h-auto md:w-[392px] md:translate-y-0 md:opacity-100',
               expanded ? 'h-[68%]' : 'h-[186px]',
               showDetail && 'max-md:pointer-events-none max-md:translate-y-8 max-md:opacity-0',
             )}
@@ -184,6 +192,7 @@ export function LiveMapPage() {
               }}
               expanded={expanded}
               onToggleExpanded={() => setExpanded((e) => !e)}
+              onShowTable={() => setParams({ view: 'table' }, { replace: true })}
             />
           </section>
 

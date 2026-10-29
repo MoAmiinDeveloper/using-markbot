@@ -15,8 +15,8 @@ import (
 // The counters ($5 distance, $6 engine seconds, $7 tracker odometer) are
 // increments computed from the in-order fixes of the batch.
 const upsertStateSQL = `INSERT INTO device_state AS s (device_id, position_time, position, last_seen,
-	gps_distance, engine_seconds, tracker_odometer)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+	gps_distance, engine_seconds, tracker_odometer, motion_since, day_key, day_start_km)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 ON CONFLICT (device_id) DO UPDATE SET
 	last_seen     = GREATEST(s.last_seen, EXCLUDED.last_seen),
 	position      = CASE WHEN s.position_time IS NULL OR EXCLUDED.position_time > s.position_time
@@ -24,7 +24,10 @@ ON CONFLICT (device_id) DO UPDATE SET
 	position_time = GREATEST(s.position_time, EXCLUDED.position_time),
 	gps_distance     = s.gps_distance + EXCLUDED.gps_distance,
 	engine_seconds   = s.engine_seconds + EXCLUDED.engine_seconds,
-	tracker_odometer = COALESCE(EXCLUDED.tracker_odometer, s.tracker_odometer)`
+	tracker_odometer = COALESCE(EXCLUDED.tracker_odometer, s.tracker_odometer),
+	motion_since     = COALESCE(EXCLUDED.motion_since, s.motion_since),
+	day_key          = COALESCE(EXCLUDED.day_key, s.day_key),
+	day_start_km     = COALESCE(EXCLUDED.day_start_km, s.day_start_km)`
 
 const insertPositionSQL = `INSERT INTO positions (device_id, device_time, server_time, lat, lng, altitude,
 	speed, course, satellites, valid, priority, event_id, attributes)
@@ -68,6 +71,12 @@ const MaxFutureSkew = 10 * time.Minute
 
 // AttrOriginalTime keeps the device-reported time of a corrected record.
 const AttrOriginalTime = "originalDeviceTime"
+
+// dayStart is the beginning of a device's local day for today's distance.
+type dayStart struct {
+	key string
+	km  float64
+}
 
 // Positions implements domain.Sink. The batch is written in a single round
 // trip (pgx batches run in one implicit transaction): all positions plus one
@@ -123,10 +132,18 @@ func (s *Store) Positions(ctx context.Context, batch []domain.Position) error {
 	// Odometer / engine-hour increments from fixes newer than the cache.
 	latest := make(map[int64]*domain.Position, len(newest))
 	lastFix := make(map[int64]*domain.Position, len(newest))
+	// A new local day starts today's distance from the odometer before this
+	// batch (the batch's own distance counts towards the new day).
+	newDays := make(map[int64]dayStart)
 	s.mu.RLock()
-	for id := range newest {
+	for id, p := range newest {
 		if e, ok := s.devices[id]; ok {
 			latest[id], lastFix[id] = e.dev.Position, e.lastFix
+			if cur := e.dev.Position; cur == nil || p.DeviceTime.After(cur.DeviceTime) {
+				if k := dayKey(p.DeviceTime, s.opts.Location); k != e.dayKey {
+					newDays[id] = dayStart{key: k, km: e.odometerKm()}
+				}
+			}
 		}
 	}
 	s.mu.RUnlock()
@@ -145,10 +162,15 @@ func (s *Store) Positions(ctx context.Context, batch []domain.Position) error {
 		}
 		var dist, secs float64
 		var odo *float64
+		var since *time.Time
 		if d := deltas[id]; d != nil {
-			dist, secs, odo = d.distance, d.seconds, d.odometer
+			dist, secs, odo, since = d.distance, d.seconds, d.odometer, d.motionSince
 		}
-		b.Queue(upsertStateSQL, id, p.DeviceTime, js, now, dist, secs, odo)
+		var dk, dkm any
+		if nd, ok := newDays[id]; ok {
+			dk, dkm = nd.key, nd.km
+		}
+		b.Queue(upsertStateSQL, id, p.DeviceTime, js, now, dist, secs, odo, since, dk, dkm)
 	}
 	// Resent records hit the unique key and are skipped; inserted marks the rest.
 	inserted := make([]bool, len(ps))
@@ -165,7 +187,7 @@ func (s *Store) Positions(ctx context.Context, batch []domain.Position) error {
 		return fmt.Errorf("store positions: %w", err)
 	}
 
-	s.updateCache(ps, newest, deltas, now)
+	s.updateCache(ps, newest, deltas, newDays, now)
 
 	if s.hooks.Positions != nil {
 		fresh := make([]domain.Position, 0, len(ps))
@@ -182,12 +204,18 @@ func (s *Store) Positions(ctx context.Context, batch []domain.Position) error {
 }
 
 // updateCache advances the cached latest positions and publishes live updates.
-func (s *Store) updateCache(ps []domain.Position, newest map[int64]*domain.Position, deltas map[int64]*counterDelta, now time.Time) {
+func (s *Store) updateCache(ps []domain.Position, newest map[int64]*domain.Position, deltas map[int64]*counterDelta,
+	newDays map[int64]dayStart, now time.Time) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for id, d := range deltas {
 		if e, ok := s.devices[id]; ok {
 			e.counters.apply(d)
+		}
+	}
+	for id, nd := range newDays {
+		if e, ok := s.devices[id]; ok {
+			e.dayKey, e.dayStartKm = nd.key, nd.km
 		}
 	}
 	touched := make(map[int64]*deviceEntry, len(newest))

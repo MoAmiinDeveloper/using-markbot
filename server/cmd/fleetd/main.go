@@ -55,6 +55,7 @@ type config struct {
 	Geocoder      string
 	GeocoderURL   string
 	DataDir       string
+	Location      *time.Location
 }
 
 func loadConfig() (config, error) {
@@ -83,6 +84,12 @@ func loadConfig() (config, error) {
 	}
 	if err := c.LogLevel.UnmarshalText([]byte(env("LOG_LEVEL", "info"))); err != nil {
 		return c, fmt.Errorf("LOG_LEVEL: %w", err)
+	}
+	c.Location = time.Local
+	if tz := os.Getenv("TIMEZONE"); tz != "" {
+		if c.Location, err = time.LoadLocation(tz); err != nil {
+			return c, fmt.Errorf("TIMEZONE must be an IANA name like Africa/Mogadishu: %w", err)
+		}
 	}
 	if c.LogFormat != "text" && c.LogFormat != "json" {
 		return c, errors.New("LOG_FORMAT must be text or json")
@@ -137,6 +144,7 @@ func run(cfg config, log *slog.Logger) error {
 	st, err := store.New(ctx, pool, store.Options{
 		AutoRegister: cfg.AutoRegister,
 		OfflineAfter: cfg.OfflineAfter,
+		Location:     cfg.Location,
 		Publisher:    h,
 		Logger:       log.With("component", "store"),
 	})

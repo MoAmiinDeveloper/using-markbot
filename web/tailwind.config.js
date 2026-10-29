@@ -24,9 +24,12 @@ export default {
           950: '#131a3c', 900: '#19214a', 850: '#1d2753', 800: '#222d5d', 750: '#293569', 700: '#323f78',
         },
       },
+      // used throughout for tinted badge backgrounds (bg-emerald-500/12…)
+      opacity: { 12: '0.12' },
       boxShadow: {
         panel: '0 10px 40px -12px rgb(0 0 0 / 0.35), 0 2px 8px -2px rgb(0 0 0 / 0.15)',
         soft: '0 1px 2px rgb(0 0 0 / 0.06), 0 1px 3px rgb(0 0 0 / 0.08)',
+        card: '0 1px 2px rgb(34 45 93 / 0.04), 0 6px 20px -8px rgb(34 45 93 / 0.10)',
       },
       keyframes: {
         'fade-in': { from: { opacity: '0' }, to: { opacity: '1' } },

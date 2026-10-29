@@ -593,7 +593,7 @@ export default function DriversPage() {
             <>
               <div className="hidden overflow-x-auto md:block">
                 <table className="w-full text-[13px]">
-                  <thead className="bg-slate-50/80 text-left text-[12px] text-slate-500 dark:bg-white/[0.02] dark:text-slate-400">
+                  <thead className="bg-navy-50/80 text-navy-700/80 [&_th]:font-semibold text-left text-[12px] dark:bg-white/[0.02] dark:text-slate-400">
                     <tr>
                       <th scope="col" className="px-4 py-2.5 font-medium">Driver</th>
                       <th scope="col" className="px-4 py-2.5 font-medium">Licence</th>

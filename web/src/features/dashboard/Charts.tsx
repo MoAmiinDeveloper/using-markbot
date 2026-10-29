@@ -14,23 +14,47 @@ function niceMax(v: number) {
   return ([1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].find((s) => n <= s) ?? 10) * p
 }
 
-/** Distance per day, gold bars with a hover read-out. */
+/** Smooth curve through points (Catmull-Rom as cubic Béziers). */
+function smoothPath(pts: Array<[number, number]>): string {
+  if (pts.length === 0) return ''
+  if (pts.length === 1) return `M${pts[0][0]},${pts[0][1]}`
+  let d = `M${pts[0][0]},${pts[0][1]}`
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] ?? pts[i]
+    const p1 = pts[i]
+    const p2 = pts[i + 1]
+    const p3 = pts[i + 2] ?? p2
+    // control points stay between the two ends so the curve never overshoots (no dips below 0)
+    const lo = Math.min(p1[1], p2[1])
+    const hi = Math.max(p1[1], p2[1])
+    const clamp = (y: number) => Math.min(hi, Math.max(lo, y))
+    const c1: [number, number] = [p1[0] + (p2[0] - p0[0]) / 6, clamp(p1[1] + (p2[1] - p0[1]) / 6)]
+    const c2: [number, number] = [p2[0] - (p3[0] - p1[0]) / 6, clamp(p2[1] - (p3[1] - p1[1]) / 6)]
+    d += ` C${c1[0]},${c1[1]} ${c2[0]},${c2[1]} ${p2[0]},${p2[1]}`
+  }
+  return d
+}
+
+/** Distance per day: smooth area chart (navy line, gold fill) with a hover read-out. */
 export function DistanceBars({ data }: { data: DashboardData['distanceByDay'] }) {
   const [hover, setHover] = useState<number | null>(null)
   const max = niceMax(Math.max(...data.map((d) => d.distance), 0))
   const n = data.length
   const W = 600
   const H = 180
-  const gap = n > 14 ? 3 : 8
-  const bw = (W - gap * (n - 1)) / Math.max(1, n)
   const total = data.reduce((s, d) => s + d.distance, 0)
   const avg = n ? total / n : 0
   const h = hover != null ? data[hover] : null
+  const xOf = (i: number) => (n <= 1 ? W / 2 : (i / (n - 1)) * W)
+  const yOf = (v: number) => H - (v / max) * (H - 6)
+  const pts = data.map((d, i) => [xOf(i), yOf(d.distance)] as [number, number])
+  const line = smoothPath(pts)
+  const area = pts.length ? `${line} L${xOf(n - 1)},${H} L${xOf(0)},${H} Z` : ''
   return (
     <div>
       <div className="mb-3 flex items-end gap-6">
         <div>
-          <div className="tabular text-[26px] font-semibold leading-none tracking-tight text-slate-900 dark:text-white">
+          <div className="tabular text-[26px] font-semibold leading-none tracking-tight text-navy-800 dark:text-white">
             {Math.round(total).toLocaleString()} <span className="text-[13px] font-medium text-slate-400">km</span>
           </div>
           <div className="mt-1 text-[12px] text-slate-500 dark:text-slate-400">total · {Math.round(avg).toLocaleString()} km/day average</div>
@@ -38,7 +62,7 @@ export function DistanceBars({ data }: { data: DashboardData['distanceByDay'] })
         <div className="tabular ml-auto min-h-[34px] text-right text-[12px]" aria-live="polite">
           {h && (
             <>
-              <div className="font-semibold text-slate-900 dark:text-white">{Math.round(h.distance).toLocaleString()} km</div>
+              <div className="font-semibold text-navy-800 dark:text-white">{Math.round(h.distance).toLocaleString()} km</div>
               <div className="text-slate-500">{format(new Date(`${h.date}T00:00:00`), 'EEE d MMM')}</div>
             </>
           )}
@@ -50,36 +74,46 @@ export function DistanceBars({ data }: { data: DashboardData['distanceByDay'] })
           <span className="tabular">{kmFmt(max / 2)}</span>
           <span className="tabular">0</span>
         </div>
-        <svg viewBox={`0 0 ${W} ${H + 20}`} className="ml-8 block h-[200px] w-[calc(100%-32px)]" preserveAspectRatio="none" role="img" aria-label="Distance by day" onMouseLeave={() => setHover(null)}>
-          {[0, 0.5, 1].map((k) => (
-            <line key={k} x1="0" x2={W} y1={H * k + 0.5} y2={H * k + 0.5} className="stroke-slate-200 dark:stroke-white/[0.07]" strokeDasharray={k === 1 ? undefined : '3 4'} vectorEffect="non-scaling-stroke" />
-          ))}
-          {data.map((d, i) => {
-            const bh = (d.distance / max) * H
-            const x = i * (bw + gap)
-            const on = hover === i
-            const today = i === n - 1
-            return (
-              <g key={d.date} onMouseEnter={() => setHover(i)} onClick={() => setHover(i)}>
-                <rect x={x} y={0} width={bw} height={H} fill="transparent" />
-                <rect
-                  x={x}
-                  y={H - bh}
-                  width={bw}
-                  height={Math.max(bh, d.distance > 0 ? 2 : 0)}
-                  rx={Math.min(4, bw / 3)}
-                  className={cn('transition-[fill,opacity]', on ? 'fill-brand-300' : today ? 'fill-brand-500' : 'fill-navy-600 dark:fill-brand-600')}
-                />
-              </g>
-            )
-          })}
-        </svg>
-        <div className="pointer-events-none absolute bottom-0 left-8 right-0 flex text-[11px] text-slate-400" style={{ gap: `${(gap / W) * 100}%` }}>
+        <div className="ml-8">
+          <div className="relative">
+          <svg viewBox={`0 0 ${W} ${H}`} className="block h-[180px] w-full overflow-visible" preserveAspectRatio="none" role="img" aria-label="Distance by day" onMouseLeave={() => setHover(null)}>
+            <defs>
+              <linearGradient id="dist-fill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#ffd700" stopOpacity="0.45" />
+                <stop offset="100%" stopColor="#ffd700" stopOpacity="0.02" />
+              </linearGradient>
+            </defs>
+            {[0, 0.5, 1].map((k) => (
+              <line key={k} x1="0" x2={W} y1={H * k} y2={H * k} className="stroke-slate-200 dark:stroke-white/[0.07]" strokeDasharray={k === 1 ? undefined : '3 4'} vectorEffect="non-scaling-stroke" />
+            ))}
+            {hover != null && <line x1={xOf(hover)} x2={xOf(hover)} y1={0} y2={H} className="stroke-navy-200 dark:stroke-white/20" vectorEffect="non-scaling-stroke" />}
+            <path d={area} fill="url(#dist-fill)" />
+            <path d={line} fill="none" strokeWidth="2.5" strokeLinejoin="round" className="stroke-navy-700 dark:stroke-brand-400" vectorEffect="non-scaling-stroke" />
+            {data.map((d, i) => {
+              const x0 = n <= 1 ? 0 : xOf(i) - W / (n - 1) / 2
+              return <rect key={d.date} x={x0} y={0} width={n <= 1 ? W : W / (n - 1)} height={H} fill="transparent" onMouseEnter={() => setHover(i)} onClick={() => setHover(i)} />
+            })}
+          </svg>
+          {/* point markers in HTML so they stay round whatever the aspect ratio */}
           {data.map((d, i) => (
-            <span key={d.date} className={cn('flex-1 text-center', i === n - 1 && 'font-semibold text-slate-600 dark:text-slate-200')}>
-              {n <= 10 || i % Math.ceil(n / 8) === 0 || i === n - 1 ? format(new Date(`${d.date}T00:00:00`), n <= 10 ? 'EEE' : 'd/M') : ''}
-            </span>
+            <span
+              key={d.date}
+              className={cn(
+                'pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow dark:border-ink-900',
+                hover === i ? 'h-3.5 w-3.5 bg-brand-500' : i === n - 1 ? 'h-2.5 w-2.5 bg-brand-500' : 'h-2 w-2 bg-navy-700 dark:bg-brand-400',
+                n > 14 && hover !== i && i !== n - 1 && 'hidden',
+              )}
+              style={{ left: `${(xOf(i) / W) * 100}%`, top: `${(yOf(d.distance) / H) * 100}%` }}
+            />
           ))}
+          </div>
+          <div className="pointer-events-none mt-2 flex justify-between text-[11px] text-slate-400">
+            {data.map((d, i) => (
+              <span key={d.date} className={cn('w-0 whitespace-nowrap text-center [&>*]:-translate-x-1/2 [&>*]:inline-block', i === n - 1 && 'font-semibold text-slate-600 dark:text-slate-200')}>
+                <span>{n <= 10 || i % Math.ceil(n / 8) === 0 || i === n - 1 ? format(new Date(`${d.date}T00:00:00`), n <= 10 ? 'EEE' : 'd/M') : ''}</span>
+              </span>
+            ))}
+          </div>
         </div>
       </div>
     </div>
