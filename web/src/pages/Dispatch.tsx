@@ -382,7 +382,7 @@ export default function DispatchPage() {
         <div className="shrink-0 space-y-3 px-3 pb-3 pt-3 sm:px-5 sm:pt-5 lg:px-6">
           <div className="flex items-center justify-between gap-3 sm:items-end">
             <div className="min-w-0">
-              <h1 className="text-[20px] font-semibold tracking-tight text-slate-900 dark:text-white">Dispatch</h1>
+              <h1 className="page-title">Dispatch</h1>
               <p className="hidden text-[13px] text-slate-500 dark:text-slate-400 sm:block">Jobs, stops and proof of delivery — updated live from the driver app</p>
             </div>
             <div className="flex items-center gap-2">

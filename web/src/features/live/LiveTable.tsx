@@ -40,12 +40,12 @@ export function LiveTable({ devices, onShowMap, onOpen }: { devices: Device[]; o
               onClick={() => setFilter(f)}
               className={cn(
                 'inline-flex h-8 items-center gap-1.5 rounded-full border pl-3 pr-1 text-[12.5px] font-medium transition-colors',
-                active ? 'border-navy-600 bg-navy-700 text-white dark:border-brand-500 dark:bg-brand-500 dark:text-navy-900' : 'border-slate-200 bg-white text-slate-600 hover:border-navy-200 dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-300',
+                active ? 'border-brand-500 bg-brand-500 text-navy-900 shadow-sm shadow-brand-500/30' : 'border-slate-200 bg-white text-slate-600 hover:border-navy-200 dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-300',
               )}
             >
               {f !== 'all' && <span className="h-1.5 w-1.5 rounded-full" style={{ background: STATUS_META[f].color }} />}
               {f === 'all' ? 'All' : f === 'never' ? 'Never' : STATUS_META[f].label}
-              <span className={cn('tabular min-w-[22px] rounded-full px-1.5 text-center text-[11px] font-semibold', active ? 'bg-white/20' : 'bg-navy-50 text-navy-700 dark:bg-white/10 dark:text-slate-200')}>{n}</span>
+              <span className={cn('tabular min-w-[22px] rounded-full px-1.5 text-center text-[11px] font-semibold', active ? 'bg-navy-900/15 text-navy-900' : 'bg-navy-50 text-navy-700 dark:bg-white/10 dark:text-slate-200')}>{n}</span>
             </button>
           )
         })}

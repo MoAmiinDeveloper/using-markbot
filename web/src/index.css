@@ -64,6 +64,10 @@
   .card table tbody tr {
     @apply transition-colors hover:bg-navy-50/40 dark:hover:bg-white/[0.02];
   }
+  /* Page title: Somtel navy with a short gold underline */
+  .page-title {
+    @apply relative mb-1.5 pb-1.5 text-[20px] font-semibold tracking-tight text-navy-800 after:absolute after:bottom-0 after:left-0 after:h-[3px] after:w-8 after:rounded-full after:bg-brand-500 dark:text-white;
+  }
   /* Section divider label: "Fleet highlights ———" */
   .section-label {
     @apply flex items-center gap-3 text-[12px] font-semibold text-navy-400 after:h-px after:flex-1 after:bg-navy-100 dark:text-slate-500 dark:after:bg-white/[0.06];

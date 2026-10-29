@@ -34,7 +34,7 @@ export default function MaintenancePage() {
       <div className="mx-auto max-w-[1400px] space-y-4 p-3 sm:p-5 lg:p-6">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h1 className="text-[20px] font-semibold tracking-tight text-slate-900 dark:text-white">Maintenance</h1>
+            <h1 className="page-title">Maintenance</h1>
             <p className="text-[13px] text-slate-500 dark:text-slate-400">Service schedules, document renewals and running costs</p>
           </div>
           {tab !== 'schedules' && (

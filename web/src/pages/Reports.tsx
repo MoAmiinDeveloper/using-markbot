@@ -460,7 +460,7 @@ export default function ReportsPage() {
       {/* catalogue (desktop) */}
       <aside className="hidden w-[248px] shrink-0 flex-col border-r border-slate-200/80 bg-white dark:border-white/[0.06] dark:bg-ink-900 lg:flex">
         <div className="px-4 pb-0 pt-4">
-          <h1 className="text-[16px] font-semibold tracking-tight text-slate-900 dark:text-white">Reports</h1>
+          <h1 className="text-[16px] font-semibold tracking-tight text-navy-800 dark:text-white">Reports</h1>
           <p className="text-[12px] text-slate-500 dark:text-slate-400">{REPORTS.length} reports · CSV, Excel & PDF</p>
         </div>
         <Catalogue value={f.type} onPick={pick} schedules={schedulesQ.data?.length} onSchedules={openSchedules} schedulesActive={showSchedules} />

@@ -72,6 +72,10 @@ const MaxFutureSkew = 10 * time.Minute
 // AttrOriginalTime keeps the device-reported time of a corrected record.
 const AttrOriginalTime = "originalDeviceTime"
 
+// maxDayKm is more than any vehicle drives in a day; a larger "today"
+// means the day's baseline is wrong.
+const maxDayKm = 2000
+
 // dayStart is the beginning of a device's local day for today's distance.
 type dayStart struct {
 	key string
@@ -132,22 +136,61 @@ func (s *Store) Positions(ctx context.Context, batch []domain.Position) error {
 	// Odometer / engine-hour increments from fixes newer than the cache.
 	latest := make(map[int64]*domain.Position, len(newest))
 	lastFix := make(map[int64]*domain.Position, len(newest))
-	// A new local day starts today's distance from the odometer before this
-	// batch (the batch's own distance counts towards the new day).
-	newDays := make(map[int64]dayStart)
 	s.mu.RLock()
-	for id, p := range newest {
+	for id := range newest {
 		if e, ok := s.devices[id]; ok {
 			latest[id], lastFix[id] = e.dev.Position, e.lastFix
-			if cur := e.dev.Position; cur == nil || p.DeviceTime.After(cur.DeviceTime) {
-				if k := dayKey(p.DeviceTime, s.opts.Location); k != e.dayKey {
-					newDays[id] = dayStart{key: k, km: e.odometerKm()}
-				}
-			}
 		}
 	}
 	s.mu.RUnlock()
+	// Snapshot latest before computeDeltas advances it.
+	prevLatest := make(map[int64]*domain.Position, len(latest))
+	for id, p := range latest {
+		prevLatest[id] = p
+	}
 	deltas := computeDeltas(ps, latest, lastFix)
+
+	// Today's distance: a new local day starts from the odometer before this
+	// batch (the batch's own distance counts towards the new day). The very
+	// first day, and the moment the tracker starts reporting its own
+	// odometer (a different scale than GPS distance), start from the reading
+	// after the batch instead, so a fresh device never shows its whole
+	// odometer as today's distance.
+	newDays := make(map[int64]dayStart)
+	s.mu.RLock()
+	for id, p := range newest {
+		e, ok := s.devices[id]
+		if !ok {
+			continue
+		}
+		if cur := prevLatest[id]; cur != nil && !p.DeviceTime.After(cur.DeviceTime) {
+			continue
+		}
+		before := e.odometerKm()
+		after := before
+		switched := false
+		if d := deltas[id]; d != nil {
+			switch {
+			case d.odometer != nil:
+				after = *d.odometer / 1000
+				switched = e.trackerOdometer == nil
+			case e.trackerOdometer == nil:
+				after = before + d.distance/1000
+			}
+		}
+		switch k := dayKey(p.DeviceTime, s.opts.Location); {
+		case k != e.dayKey && (e.dayKey == "" || switched):
+			newDays[id] = dayStart{key: k, km: after}
+		case k != e.dayKey:
+			newDays[id] = dayStart{key: k, km: before}
+		case switched:
+			newDays[id] = dayStart{key: k, km: after}
+		case before-e.dayStartKm > maxDayKm:
+			// a baseline saved before the tracker odometer was known
+			newDays[id] = dayStart{key: k, km: before}
+		}
+	}
+	s.mu.RUnlock()
 
 	b := &pgx.Batch{}
 	for i := range ps {

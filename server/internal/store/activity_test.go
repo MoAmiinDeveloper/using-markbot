@@ -66,3 +66,33 @@ func TestActivityStatusSinceAndTodayKm(t *testing.T) {
 		t.Fatalf("next day: %+v", d)
 	}
 }
+
+// A fresh device whose tracker reports a large odometer must not show the
+// whole odometer as today's distance.
+func TestTodayKmWithTrackerOdometer(t *testing.T) {
+	ctx := context.Background()
+	pool := openTestPool(t, "store_activity_odo_test")
+	start := time.Date(2026, 10, 27, 9, 0, 0, 0, time.UTC)
+	clk := newClock(start)
+	s := newTestStore(t, pool, Options{AutoRegister: true, Now: clk.Now, Location: time.UTC})
+	if ok, _ := s.Authorize(ctx, imei1, "teltonika"); !ok {
+		t.Fatal("authorize failed")
+	}
+	feed := func(at time.Time, odoM float64) {
+		t.Helper()
+		clk.Set(at)
+		p := pos(at, 25, 50, true)
+		p.Attributes[domain.AttrOdometer] = odoM
+		if err := s.Positions(ctx, []domain.Position{p}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	feed(start, 71_382_000)
+	if d := s.Devices()[0]; d.TodayKm != 0 {
+		t.Fatalf("first record: todayKm=%v", d.TodayKm)
+	}
+	feed(start.Add(time.Minute), 71_385_500)
+	if d := s.Devices()[0]; d.TodayKm != 3.5 {
+		t.Fatalf("after 3.5 km: todayKm=%v", d.TodayKm)
+	}
+}

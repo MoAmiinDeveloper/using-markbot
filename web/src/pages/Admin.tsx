@@ -665,7 +665,7 @@ export default function AdminPage() {
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-[1400px] space-y-4 p-3 sm:p-5 lg:p-6">
         <div>
-          <h1 className="text-[20px] font-semibold tracking-tight text-slate-900 dark:text-white">Users & Groups</h1>
+          <h1 className="page-title">Users & Groups</h1>
           <p className="text-[13px] text-slate-500 dark:text-slate-400">Who can sign in, what they can do, and which vehicles they see</p>
         </div>
         <Tabs<Tab>

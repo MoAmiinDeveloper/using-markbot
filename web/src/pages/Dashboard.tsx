@@ -233,7 +233,7 @@ export default function DashboardPage() {
       <div className="mx-auto max-w-[1400px] space-y-4 p-3 sm:p-5 lg:p-6">
         <div className="flex flex-wrap items-end justify-between gap-2">
           <div>
-            <h1 className="text-[20px] font-semibold tracking-tight text-slate-900 dark:text-white">Fleet overview</h1>
+            <h1 className="page-title">Fleet overview</h1>
             <p className="text-[13px] text-slate-500 dark:text-slate-400">Live status across all vehicles · trends for the last {days} days</p>
           </div>
           <Segmented<7 | 30>

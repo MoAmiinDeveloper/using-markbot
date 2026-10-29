@@ -126,21 +126,22 @@ export function SosButton() {
 /** Light page header: brand wordmark, breadcrumb (section › page), search and actions. */
 export function TopBar({ section, title }: { section?: string; title: string }) {
   return (
-    <header className="relative z-20 flex h-14 shrink-0 items-center gap-3 border-b border-slate-200/80 bg-white px-3 dark:border-white/[0.06] dark:bg-ink-900 sm:px-4">
+    // Brand bar: always Somtel navy with the gold rule; `dark` gives children their on-navy styling.
+    <header className="dark relative z-20 flex h-14 shrink-0 items-center gap-3 border-b-[3px] border-brand-500 bg-navy-700 px-3 text-white sm:px-4">
       <Link to="/live" aria-label={`${APP_NAME} home`} className="flex shrink-0 items-center rounded-lg md:hidden">
-        <Logo size="h-9" className="text-navy-700 dark:text-white [&>span:last-child]:hidden" />
+        <Logo size="h-9" className="text-white [&>span:last-child]:hidden" />
       </Link>
       <Link to="/live" aria-label={`${APP_NAME} home`} className="hidden shrink-0 items-center rounded-lg xl:flex">
-        <Logo size="h-10" className="text-navy-700 dark:text-white" />
+        <Logo size="h-10" className="text-white" />
       </Link>
-      <span className="hidden h-7 w-px bg-slate-200 dark:bg-white/10 xl:block" aria-hidden />
+      <span className="hidden h-7 w-px bg-white/15 xl:block" aria-hidden />
       <div className="hidden min-w-[120px] leading-tight md:block">
         {section && (
-          <p className="flex items-center gap-1 text-[11px] font-medium text-slate-400">
+          <p className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-brand-400">
             {section} <ChevronRight className="h-3 w-3" />
           </p>
         )}
-        <h1 className="text-[15px] font-semibold tracking-tight text-navy-800 dark:text-white">{title}</h1>
+        <h1 className="text-[15px] font-semibold tracking-tight text-white">{title}</h1>
       </div>
       <GlobalSearch className="mx-auto max-w-md flex-1" />
       <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
@@ -148,7 +149,7 @@ export function TopBar({ section, title }: { section?: string; title: string }) 
           <ConnectionBadge compact />
         </span>
         <SosButton />
-        <span className="hidden h-6 w-px bg-slate-200 dark:bg-white/10 sm:block" aria-hidden />
+        <span className="hidden h-6 w-px bg-white/15 sm:block" aria-hidden />
         <span className="hidden sm:contents">
           <ThemeToggle />
         </span>

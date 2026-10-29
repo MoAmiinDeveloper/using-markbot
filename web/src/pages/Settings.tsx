@@ -126,7 +126,7 @@ export default function SettingsPage() {
     <div className="h-full overflow-y-auto" id="settings-scroll">
       <div className="mx-auto max-w-5xl p-3 sm:p-5 lg:p-6">
         <div className="mb-4">
-          <h1 className="text-[20px] font-semibold tracking-tight text-slate-900 dark:text-white">Settings</h1>
+          <h1 className="page-title">Settings</h1>
           <p className="text-[13px] text-slate-500 dark:text-slate-400">Notifications, alert rules and integrations for {APP_NAME}</p>
         </div>
         <div className="lg:grid lg:grid-cols-[200px_minmax(0,1fr)] lg:gap-6">

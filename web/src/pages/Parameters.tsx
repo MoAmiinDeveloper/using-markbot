@@ -144,7 +144,7 @@ export default function ParametersPage() {
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-[1100px] space-y-4 p-3 sm:p-5 lg:p-6">
         <div>
-          <h1 className="text-[20px] font-semibold tracking-tight text-slate-900 dark:text-white">Data parameters</h1>
+          <h1 className="page-title">Data parameters</h1>
           <p className="text-[13px] text-slate-500 dark:text-slate-400">Everything your trackers report — named, calculated and turned into alerts</p>
         </div>
         <Tabs<Tab>

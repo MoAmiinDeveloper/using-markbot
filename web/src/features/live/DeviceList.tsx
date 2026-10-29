@@ -206,7 +206,7 @@ export function DeviceList({
                 className={cn(
                   'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border pl-2.5 pr-1 text-[12px] font-medium transition-colors',
                   active
-                    ? 'border-navy-600 bg-navy-700 text-white dark:border-brand-500 dark:bg-brand-500 dark:text-navy-900'
+                    ? 'border-brand-500 bg-brand-500 text-navy-900 shadow-sm shadow-brand-500/30'
                     : 'border-slate-200 bg-white text-slate-600 hover:border-navy-200 dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-300 dark:hover:border-white/20',
                 )}
               >
@@ -215,7 +215,7 @@ export function DeviceList({
                 <span
                   className={cn(
                     'tabular min-w-[20px] rounded-full px-1.5 text-center text-[11px] font-semibold',
-                    active ? 'bg-white/20 text-white dark:bg-navy-900/15 dark:text-navy-900' : 'bg-navy-50 text-navy-700 dark:bg-white/10 dark:text-slate-200',
+                    active ? 'bg-navy-900/15 text-navy-900' : 'bg-navy-50 text-navy-700 dark:bg-white/10 dark:text-slate-200',
                   )}
                 >
                   {c.count}

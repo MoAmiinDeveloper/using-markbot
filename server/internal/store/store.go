@@ -333,7 +333,9 @@ func (s *Store) view(e *deviceEntry, now time.Time) Device {
 		d.StatusSince = e.motionSince
 	}
 	if e.dayKey != "" && e.dayKey == dayKey(now, s.opts.Location) {
-		d.TodayKm = round1(max(0, e.odometerKm()-e.dayStartKm))
+		if km := e.odometerKm() - e.dayStartKm; km > 0 && km <= maxDayKm {
+			d.TodayKm = round1(km)
+		}
 	}
 	return d
 }
