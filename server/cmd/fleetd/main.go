@@ -5,6 +5,8 @@
 package main
 
 import (
+	_ "time/tzdata" // TIMEZONE works on Windows too (no system zoneinfo)
+
 	"context"
 	"crypto/rand"
 	"errors"
