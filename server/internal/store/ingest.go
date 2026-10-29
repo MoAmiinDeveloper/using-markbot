@@ -111,6 +111,7 @@ func (s *Store) Positions(ctx context.Context, batch []domain.Position) error {
 			p.Attributes[AttrOriginalTime] = p.DeviceTime.Format(time.RFC3339)
 			p.DeviceTime = p.ServerTime
 		}
+		s.applyCalculated(p)
 	}
 	// Stable sort by device time: newest-per-device is last, publish order is chronological.
 	sort.SliceStable(ps, func(i, j int) bool { return ps[i].DeviceTime.Before(ps[j].DeviceTime) })

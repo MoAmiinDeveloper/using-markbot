@@ -22,6 +22,7 @@ import (
 
 	"github.com/moamiindeveloper/fleet/server/internal/api"
 	"github.com/moamiindeveloper/fleet/server/internal/commands"
+	"github.com/moamiindeveloper/fleet/server/internal/customevents"
 	"github.com/moamiindeveloper/fleet/server/internal/dispatch"
 	"github.com/moamiindeveloper/fleet/server/internal/events"
 	"github.com/moamiindeveloper/fleet/server/internal/gateway"
@@ -164,6 +165,7 @@ func run(cfg config, log *slog.Logger) error {
 		return err
 	}
 	engine.AddRule(sensorSvc)
+	engine.AddRule(customevents.New(st))
 	// Dispatch module: job stop tracking and route deviation rules.
 	if err := os.MkdirAll(cfg.DataDir, 0o750); err != nil {
 		return fmt.Errorf("DATA_DIR: %w", err)

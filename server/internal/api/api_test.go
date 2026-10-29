@@ -19,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/moamiindeveloper/fleet/server/internal/commands"
+	"github.com/moamiindeveloper/fleet/server/internal/customevents"
 	"github.com/moamiindeveloper/fleet/server/internal/domain"
 	"github.com/moamiindeveloper/fleet/server/internal/events"
 	"github.com/moamiindeveloper/fleet/server/internal/hub"
@@ -84,6 +85,7 @@ func newEnv(t *testing.T, webDir string) *env {
 		t.Fatal(err)
 	}
 	engine := events.New(st, nt, nil)
+	engine.AddRule(customevents.New(st))
 	cmds, err := commands.New(ctx, st, teltonika.NewHandler(), engine, nil)
 	if err != nil {
 		t.Fatal(err)

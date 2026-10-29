@@ -44,6 +44,9 @@ type DeviceInput struct {
 	// SpeedLimit in km/h, 0 = global default.
 	SpeedLimit float64 `json:"speedLimit"`
 
+	Icon    string        `json:"icon"`
+	Details DeviceDetails `json:"details"`
+
 	source string // existing device's source; bridged devices skip IMEI/protocol rules
 }
 
@@ -58,6 +61,9 @@ type DevicePatch struct {
 	Phone    *string `json:"phone"`
 
 	SpeedLimit *float64 `json:"speedLimit"`
+
+	Icon    *string        `json:"icon"`
+	Details *DeviceDetails `json:"details"` // replaces all details
 }
 
 func (p DevicePatch) apply(in *DeviceInput) {
@@ -76,15 +82,26 @@ func (p DevicePatch) apply(in *DeviceInput) {
 	if p.SpeedLimit != nil {
 		in.SpeedLimit = *p.SpeedLimit
 	}
+	set(&in.Icon, p.Icon)
+	if p.Details != nil {
+		in.Details = *p.Details
+	}
 }
 
 // Normalize trims fields, applies defaults and validates the input.
 func (in *DeviceInput) Normalize() error {
-	for _, f := range []*string{&in.Name, &in.IMEI, &in.Protocol, &in.Plate, &in.Model, &in.Category, &in.Phone} {
+	for _, f := range []*string{&in.Name, &in.IMEI, &in.Protocol, &in.Plate, &in.Model, &in.Category, &in.Phone, &in.Icon} {
 		*f = strings.TrimSpace(*f)
 	}
 	in.Protocol = strings.ToLower(in.Protocol)
 	in.Category = strings.ToLower(in.Category)
+	in.Icon = strings.ToLower(in.Icon)
+	if in.Icon != "" && !slices.Contains(DeviceIcons, in.Icon) {
+		return invalid("icon must be one of: %s", strings.Join(DeviceIcons, ", "))
+	}
+	if err := normalizeDetails(&in.Details); err != nil {
+		return err
+	}
 	// Bridged devices and driver-app phones (IMEI DRV<driverId>) use free-form ids.
 	bridged := in.source == SourceTraccar || (in.Protocol == ProtocolDriverApp && strings.HasPrefix(in.IMEI, DriverAppIMEIPrefix))
 	if in.Protocol == "" {
@@ -155,9 +172,10 @@ func (s *Store) CreateDevice(ctx context.Context, in DeviceInput) (Device, error
 	if err := in.Normalize(); err != nil {
 		return Device{}, err
 	}
-	row := s.pool.QueryRow(ctx, `INSERT INTO devices AS d (name, imei, protocol, plate, model, category, phone, speed_limit)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING `+deviceColumns,
-		in.Name, in.IMEI, in.Protocol, in.Plate, in.Model, in.Category, in.Phone, in.SpeedLimit)
+	row := s.pool.QueryRow(ctx, `INSERT INTO devices AS d (name, imei, protocol, plate, model, category, phone, speed_limit,
+			icon, details)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING `+deviceColumns,
+		in.Name, in.IMEI, in.Protocol, in.Plate, in.Model, in.Category, in.Phone, in.SpeedLimit, in.Icon, in.Details)
 	d, err := scanDevice(row)
 	if isUniqueViolation(err) {
 		return Device{}, ErrDuplicateIMEI
@@ -191,15 +209,16 @@ func (s *Store) UpdateDevice(ctx context.Context, id int64, p DevicePatch) (Devi
 		return Device{}, err
 	}
 	in := DeviceInput{Name: cur.Name, IMEI: cur.IMEI, Protocol: cur.Protocol, Plate: cur.Plate,
-		Model: cur.Model, Category: cur.Category, Phone: cur.Phone, SpeedLimit: cur.SpeedLimit, source: cur.Source}
+		Model: cur.Model, Category: cur.Category, Phone: cur.Phone, SpeedLimit: cur.SpeedLimit, Icon: cur.Icon,
+		Details: cur.Details, source: cur.Source}
 	p.apply(&in)
 	if err := in.Normalize(); err != nil {
 		return Device{}, err
 	}
 	row := s.pool.QueryRow(ctx, `UPDATE devices AS d SET name = $2, imei = $3, protocol = $4, plate = $5,
-			model = $6, category = $7, phone = $8, speed_limit = $9, updated_at = now()
+			model = $6, category = $7, phone = $8, speed_limit = $9, icon = $10, details = $11, updated_at = now()
 		WHERE id = $1 RETURNING `+deviceColumns,
-		id, in.Name, in.IMEI, in.Protocol, in.Plate, in.Model, in.Category, in.Phone, in.SpeedLimit)
+		id, in.Name, in.IMEI, in.Protocol, in.Plate, in.Model, in.Category, in.Phone, in.SpeedLimit, in.Icon, in.Details)
 	d, err := scanDevice(row)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):

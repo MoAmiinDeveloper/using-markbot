@@ -39,6 +39,9 @@ const (
 	EventRefuel         = "refuel"
 	EventSensorHigh     = "sensorHigh"
 	EventSensorLow      = "sensorLow"
+
+	// Custom events (attributes: customEventId, name, severity, phase start|end).
+	EventCustom = "custom"
 )
 
 // EventTypes lists every event type.
@@ -46,7 +49,7 @@ var EventTypes = []string{EventGeofenceEnter, EventGeofenceExit, EventOverspeed,
 	EventIgnitionOff, EventAlarm, EventCommandResult, EventHarshAcceleration, EventHarshBraking,
 	EventHarshCornering, EventIdle, EventMaintenanceDue, EventDocumentExpiry,
 	EventJobAssigned, EventJobStatus, EventJobStopArrived, EventJobLate, EventRouteDeviation, EventRouteReturn,
-	EventFuelDrain, EventRefuel, EventSensorHigh, EventSensorLow}
+	EventFuelDrain, EventRefuel, EventSensorHigh, EventSensorLow, EventCustom}
 
 // HarshEventTypes are the driver-behaviour event types.
 var HarshEventTypes = []string{EventHarshAcceleration, EventHarshBraking, EventHarshCornering}

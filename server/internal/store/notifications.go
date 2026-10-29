@@ -20,7 +20,7 @@ var NotifyEventTypes = []string{EventGeofenceEnter, EventGeofenceExit, EventOver
 	EventMaintenanceDue, EventDocumentExpiry,
 	// Phase 4a.
 	EventJobAssigned, EventJobStatus, EventJobStopArrived, EventJobLate, EventRouteDeviation, EventRouteReturn,
-	EventFuelDrain, EventRefuel, EventSensorHigh, EventSensorLow}
+	EventFuelDrain, EventRefuel, EventSensorHigh, EventSensorLow, EventCustom}
 
 // DefaultChannels returns the channels used for an event type the user has
 // not configured: in-app always; Telegram and push except for the frequent

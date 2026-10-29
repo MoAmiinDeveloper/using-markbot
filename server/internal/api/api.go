@@ -129,6 +129,7 @@ func (s *Server) routes() http.Handler {
 				// Phase 4a modules.
 				s.mountDispatch(r)
 				s.mountAutomation(r)
+				s.mountParameters(r)
 
 				// Managers: only devices / geofences within their groups (checked inside).
 				r.Group(func(r chi.Router) {

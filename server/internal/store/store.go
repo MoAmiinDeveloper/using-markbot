@@ -104,6 +104,10 @@ type Device struct {
 	// Phase 4a (automation module): latest calibrated sensor values.
 	Sensors []SensorValue `json:"sensors"`
 
+	// Full registration: map icon ('' = status arrow) and vehicle/SIM/owner details.
+	Icon    string        `json:"icon"`
+	Details DeviceDetails `json:"details"`
+
 	odoOffset   float64 // km, devices.odometer_offset
 	hoursOffset float64 // h, devices.engine_hours_offset
 }
@@ -147,6 +151,9 @@ type Store struct {
 	settings   Settings
 
 	sensorCache sensorCache // sensor definitions per device + latest readings
+
+	params       paramCache       // mapped / calculated parameter definitions
+	customEvents customEventCache // custom event definitions
 }
 
 // Hooks lets services observe ingest. Callbacks run synchronously on the
@@ -204,15 +211,21 @@ func New(ctx context.Context, pool *pgxpool.Pool, opts Options) (*Store, error) 
 	if err := s.loadSensors(ctx, true); err != nil {
 		return nil, fmt.Errorf("load sensors: %w", err)
 	}
+	if err := s.loadParams(ctx); err != nil {
+		return nil, fmt.Errorf("load parameters: %w", err)
+	}
+	if err := s.loadCustomEvents(ctx); err != nil {
+		return nil, fmt.Errorf("load custom events: %w", err)
+	}
 	return s, nil
 }
 
 const deviceColumns = `d.id, d.name, d.imei, d.protocol, d.plate, d.model, d.category, d.phone,
-	d.speed_limit, d.source, d.created_at, d.updated_at, d.odometer_offset, d.engine_hours_offset`
+	d.speed_limit, d.source, d.created_at, d.updated_at, d.odometer_offset, d.engine_hours_offset, d.icon, d.details`
 
 func scanDevice(row pgx.Row, extra ...any) (Device, error) {
 	var d Device
-	dst := append([]any{&d.ID, &d.Name, &d.IMEI, &d.Protocol, &d.Plate, &d.Model, &d.Category, &d.Phone, &d.SpeedLimit, &d.Source, &d.CreatedAt, &d.UpdatedAt, &d.odoOffset, &d.hoursOffset}, extra...)
+	dst := append([]any{&d.ID, &d.Name, &d.IMEI, &d.Protocol, &d.Plate, &d.Model, &d.Category, &d.Phone, &d.SpeedLimit, &d.Source, &d.CreatedAt, &d.UpdatedAt, &d.odoOffset, &d.hoursOffset, &d.Icon, &d.Details}, extra...)
 	if err := row.Scan(dst...); err != nil {
 		return d, err
 	}
