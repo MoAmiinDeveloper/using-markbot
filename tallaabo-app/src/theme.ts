@@ -1,0 +1,15 @@
+export const colors = {
+  background: '#0F1E26',
+  rowAlt: '#162B36',
+  gold: '#EAB308',
+  goldDim: 'rgba(234, 179, 8, 0.14)',
+  goldBorder: 'rgba(234, 179, 8, 0.45)',
+  text: '#F1F5F9',
+  textMuted: '#94A3B8',
+  onGold: '#0F1E26',
+  win: '#16A34A',
+  close: '#D97706',
+  loss: '#DC2626',
+  inputBg: '#0B161C',
+  hairline: 'rgba(148, 163, 184, 0.18)',
+} as const;

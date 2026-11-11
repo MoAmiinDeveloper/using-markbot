@@ -1,0 +1,26 @@
+{
+  "expo": {
+    "name": "Tallaabo iyo Tasbiix",
+    "slug": "tallaabo-iyo-tasbiix",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0F1E26",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.tallaabo.tasbiix"
+    },
+    "android": {
+      "package": "com.tallaabo.tasbiix",
+      "permissions": ["android.permission.ACTIVITY_RECOGNITION"]
+    },
+    "plugins": [
+      [
+        "expo-sensors",
+        {
+          "motionPermission": "Allow Tallaabo iyo Tasbiix to read your step count so it can fill in today's steps."
+        }
+      ]
+    ]
+  }
+}
